@@ -39,6 +39,16 @@ message JoinTableRsp
     string err_msg = 2;
 }
 
+message DrawCardReq
+{
+    uint32 card = 1;
+}
+
+message DrawCardRsp
+{
+    uint32 card = 1;
+}
+
 message UserJoinTableMsg
 {
     uint32 tid = 1;

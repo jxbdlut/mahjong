@@ -34,7 +34,6 @@ func handleLogin(args []interface{}) {
 	if strings.Compare(passwd, req.Passwd) == 0 {
 		a.SetUserData(&userdata.UserData{
 			Uid:  req.Uid,
-			Name: req.Name,
 		})
 		a.WriteMsg(&proto.LoginRsp{
 			ErrCode: 0,

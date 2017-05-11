@@ -30,8 +30,7 @@ type agent struct {
 }
 
 var (
-	tid_chan   = make(chan uint32)
-	//name_table = []string{"jiang", "luo", "sheng", "duan"}
+	tid_chan = make(chan uint32)
 )
 
 func (a *agent) Login() error {
@@ -85,11 +84,12 @@ func (a *agent) JoinTable(tid uint32) error {
 		log.Error("join table readmsg: ", err)
 		return err
 	}
-	log.Debug("join table rsp:%v", joinTableRsp)
+	log.Debug("join table:%v rsp:%v", tid, joinTableRsp)
 	return nil
 }
 
-func (a *agent) handlerBroadCastMsg(msg interface{}) {
+func HandlerBroadCastMsg(args []interface{}) {
+	msg := args[0]
 	log.Debug("broadcast:%v", msg)
 }
 
@@ -111,7 +111,6 @@ func (a *agent) Run() {
 		if err != nil {
 			return
 		}
-		log.Debug("table_id:%v", table_id)
 	}
 	for {
 		msg, err := a.ReadMsg()
@@ -120,6 +119,7 @@ func (a *agent) Run() {
 			break
 		}
 
+		log.Debug("msg type:%v, value:%v", reflect.TypeOf(msg), msg)
 		err = a.Processor.Route(msg, a)
 		if err != nil {
 			log.Debug("route message error: %v", err)
@@ -158,6 +158,7 @@ func (a *agent) ReadMsg() (interface{}, error) {
 			log.Debug("Unmarshal data:%v", err)
 			return nil, err
 		}
+		err = a.Processor.Route(msg, a)
 		return msg, nil
 	}
 	return nil, errors.New("processor is nil")
@@ -226,6 +227,9 @@ func main() {
 			processor.Register(&proto.JoinTableReq{})
 			processor.Register(&proto.JoinTableRsp{})
 			processor.Register(&proto.UserJoinTableMsg{})
+			processor.Register(&proto.DrawCardReq{})
+			processor.Register(&proto.DrawCardRsp{})
+			proto.Processor.SetHandler(&proto.UserJoinTableMsg{}, HandlerBroadCastMsg)
 			a := &agent{uid: uid, conn: conn, Processor: processor, master: is_master}
 			return a
 		}

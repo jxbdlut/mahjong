@@ -17,6 +17,7 @@ var (
 func init() {
 	handler(&proto.CreateTableReq{}, handlerCreateTable)
 	handler(&proto.JoinTableReq{}, handlerJoinTable)
+	handler(&proto.DrawCardRsp{}, handlerDrawCardRsp)
 	tables = make(map[uint32]*Table)
 }
 
@@ -63,11 +64,10 @@ func handlerJoinTable(args []interface{}) {
 			tables[tid].addAgent(a, false)
 			rsp.ErrCode = 0
 			rsp.ErrMsg = "join successed!"
-			//table.Broadcast(&proto.UserJoinTableMsg{
-			//	Uid:req.Uid,
-			//	Name:a.UserData().(*userdata.UserData).Name,
-			//	Tid:tid,
-			//})
+			table.BroadcastExceptMe(&proto.UserJoinTableMsg{
+				Uid: req.Uid,
+				Tid: tid,
+			}, req.Uid)
 		}
 	} else {
 		log.Error("table is not exist, tid:%v", tid)
@@ -76,6 +76,17 @@ func handlerJoinTable(args []interface{}) {
 	}
 
 	a.WriteMsg(&rsp)
+}
+
+func handlerDrawCardRsp(args []interface{}) {
+	rsp := args[0].(*proto.DrawCardRsp)
+	a := args[1].(gate.Agent)
+	tid := a.UserData().(*userdata.UserData).Tid
+	uid := a.UserData().(*userdata.UserData).Uid
+	table := tables[tid]
+	if player, err := table.getPlayer(uid); err == nil {
+		player.HandlerDrawRsp(rsp)
+	}
 }
 
 func genTableId() uint32 {

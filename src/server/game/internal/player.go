@@ -3,7 +3,11 @@ package internal
 import (
 	"net"
 
+	"errors"
 	"github.com/name5566/leaf/gate"
+	"github.com/name5566/leaf/log"
+	"server/proto"
+	"time"
 )
 
 type Player struct {
@@ -14,7 +18,13 @@ type Player struct {
 	PongCards   []uint16
 	PrewinCards []uint16
 	master      bool
+	online      bool
+	table       *Table
 }
+
+var (
+	draw_rsp_chan = make(chan interface{})
+)
 
 func NewPlayer(agent gate.Agent, uid uint64) *Player {
 	p := new(Player)
@@ -24,8 +34,47 @@ func NewPlayer(agent gate.Agent, uid uint64) *Player {
 	return p
 }
 
+func (p *Player) draw() {
+	card := p.table.draw_card()
+	p.Cards = append(p.Cards, card)
+	p.WriteMsg(&proto.DrawCardReq{
+		Card: uint32(card),
+	})
+}
+
+func (p *Player) HandlerDrawRsp(msg interface{}) {
+	p.online = true
+	log.Debug("HandlerDrawRsp msg:%v", msg)
+	draw_rsp_chan <- msg
+}
+
+func (p *Player) WaitDrawRsp() (interface{}, error) {
+	select {
+	case <-draw_rsp_chan:
+		return draw_rsp_chan, nil
+	case <-time.After(10 * time.Second):
+		return nil, errors.New("time out")
+	}
+}
+
+func (p *Player) CheckPong() {
+
+}
+
 func (p *Player) SetMaster(master bool) {
 	p.master = master
+}
+
+func (p *Player) SetTable(t *Table) {
+	p.table = t
+}
+
+func (p *Player) SetOnline(online bool) {
+	p.online = online
+}
+
+func (p *Player) GetOnline() bool {
+	return p.online
 }
 
 func (p *Player) WriteMsg(msg interface{}) {

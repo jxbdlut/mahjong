@@ -35,10 +35,21 @@ func (t *Table) getPlayerIndex(uid uint64) (int, error) {
 	return -1, errors.New("not in table")
 }
 
+func (t *Table) getPlayer(uid uint64) (*Player, error) {
+	for _, player := range t.players {
+		if player.Uid == uid {
+			return player, nil
+		}
+	}
+	return nil, errors.New("not in table")
+}
+
 func (t *Table) addAgent(agent gate.Agent, master bool) error {
 	if len(t.players) < 4 {
 		player := NewPlayer(agent, agent.UserData().(*userdata.UserData).Uid)
 		player.SetMaster(master)
+		player.SetTable(t)
+		player.SetOnline(true)
 		t.players = append(t.players, player)
 		return nil
 	} else {
@@ -55,9 +66,17 @@ func (t *Table) removeAgent(agent gate.Agent) error {
 	return errors.New("Agent not in table")
 }
 
-func (t *Table) broadcast(msg interface{}) {
+func (t *Table) Broadcast(msg interface{}) {
 	for _, player := range t.players {
 		player.WriteMsg(msg)
+	}
+}
+
+func (t *Table) BroadcastExceptMe(msg interface{}, uid uint64) {
+	for _, player := range t.players {
+		if player.Uid != uid {
+			player.WriteMsg(msg)
+		}
 	}
 }
 
@@ -87,13 +106,28 @@ func (t *Table) deal() {
 	}
 }
 
+func (t *Table) draw_card() uint16 {
+	card := t.left_cards[0]
+	t.left_cards = append(t.left_cards[:0], t.left_cards[1:]...)
+	return card
+}
+
 func (t *Table) play() {
 	t.play_count++
 	t.shuffle()
 	t.deal()
-	for len(t.left_cards) > 10 && t.win_player == nil {
-		log.Debug("Table tid:%v runing", t.tid)
-		time.Sleep(5 * time.Second)
+	for len(t.left_cards) > 10 && t.win_player == nil && len(t.players) > 0 {
+		player := t.players[t.play_turn]
+		t.play_turn = (t.play_turn + 1) % uint32(len(t.players))
+		player.draw()
+		msg, err := player.WaitDrawRsp()
+		if err != nil {
+			player.SetOnline(false)
+			log.Debug("err:%v", err)
+		}
+		log.Debug("msg:%v", msg)
+		log.Debug("Table tid:%v runing, players num:%v, left_cards num:%d", t.tid, len(t.players), len(t.left_cards))
+		time.Sleep(1 * time.Second)
 	}
 }
 
