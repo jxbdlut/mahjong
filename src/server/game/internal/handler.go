@@ -34,10 +34,10 @@ func handlerCreateTable(args []interface{}) {
 		Uid: req.Uid,
 		Tid: tid,
 	})
-	table.addAgent(a)
+	table.addAgent(a, true)
 	go table.run()
 	tables[tid] = table
-	log.Debug("create table uid:%v", req.Uid)
+	log.Debug("create table Uid:%v", req.Uid)
 	a.WriteMsg(&proto.CreateTableRsp{
 		ErrCode: 0,
 		ErrMsg:  "successed!",
@@ -52,7 +52,7 @@ func handlerJoinTable(args []interface{}) {
 
 	tid := req.TableId
 	if table, ok := tables[tid]; ok {
-		if _, ok := table.getAgentIndex(req.Uid); ok == nil {
+		if _, ok := table.getPlayerIndex(req.Uid); ok == nil {
 			rsp.ErrCode = 10000
 			rsp.ErrMsg = "you areadly in table"
 		} else {
@@ -60,7 +60,7 @@ func handlerJoinTable(args []interface{}) {
 				Uid: req.Uid,
 				Tid: tid,
 			})
-			tables[tid].agents = append(tables[tid].agents, a)
+			tables[tid].addAgent(a, false)
 			rsp.ErrCode = 0
 			rsp.ErrMsg = "join successed!"
 			//table.Broadcast(&proto.UserJoinTableMsg{

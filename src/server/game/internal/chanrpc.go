@@ -30,5 +30,5 @@ func rpcCloseAgent(args []interface{}) {
 		table.removeAgent(a)
 		a.Destroy()
 	}
-	log.Debug("close agent uid: %v, tid:%v", uid, tid)
+	log.Debug("close Agent Uid: %v, tid:%v", uid, tid)
 }

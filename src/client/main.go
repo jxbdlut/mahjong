@@ -4,19 +4,20 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
-	lconf "github.com/name5566/leaf/conf"
-	"github.com/name5566/leaf/log"
-	"github.com/name5566/leaf/network"
-	"github.com/name5566/leaf/network/protobuf"
 	"math"
 	"net"
 	"os"
 	"os/signal"
 	"reflect"
-	"server/conf"
-	"server/proto"
 	"strconv"
 	"time"
+
+	lconf "github.com/name5566/leaf/conf"
+	"github.com/name5566/leaf/log"
+	"github.com/name5566/leaf/network"
+	"github.com/name5566/leaf/network/protobuf"
+	"server/conf"
+	"server/proto"
 )
 
 type agent struct {
