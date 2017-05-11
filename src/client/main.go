@@ -21,6 +21,7 @@ import (
 
 type agent struct {
 	uid       uint64
+	name      string
 	conn      network.Conn
 	Processor network.Processor
 	userData  interface{}
@@ -28,7 +29,8 @@ type agent struct {
 }
 
 var (
-	tid_chan = make(chan uint32)
+	tid_chan   = make(chan uint32)
+	//name_table = []string{"jiang", "luo", "sheng", "duan"}
 )
 
 func (a *agent) Login() error {
@@ -38,6 +40,7 @@ func (a *agent) Login() error {
 	crypt_passwd := hex.EncodeToString(cipherStr)
 	a.WriteMsg(&proto.LoginReq{
 		Uid:    a.uid,
+		Name:   a.name,
 		Passwd: crypt_passwd,
 	})
 	loginRsp, err := a.ReadMsg()
@@ -83,6 +86,10 @@ func (a *agent) JoinTable(tid uint32) error {
 	}
 	log.Debug("join table rsp:%v", joinTableRsp)
 	return nil
+}
+
+func (a *agent) handlerBroadCastMsg(msg interface{}) {
+	log.Debug("broadcast:%v", msg)
 }
 
 func (a *agent) Run() {
@@ -217,6 +224,7 @@ func main() {
 			processor.Register(&proto.CreateTableRsp{})
 			processor.Register(&proto.JoinTableReq{})
 			processor.Register(&proto.JoinTableRsp{})
+			processor.Register(&proto.UserJoinTableMsg{})
 			a := &agent{uid: uid, conn: conn, Processor: processor, master: is_master}
 			return a
 		}

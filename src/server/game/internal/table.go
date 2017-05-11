@@ -6,7 +6,6 @@ import (
 	"github.com/name5566/leaf/log"
 	"server/userdata"
 	"time"
-	"go/src/cmd/go/testdata/testinternal3"
 )
 
 type Table struct {
@@ -47,7 +46,7 @@ func (t *Table) removeAgent(agent gate.Agent) error {
 	return errors.New("agent not in table")
 }
 
-func (t *Table) broadcast(msg interface{}) {
+func (t *Table) Broadcast(msg interface{}) {
 	for _, agent := range t.agents {
 		agent.WriteMsg(msg)
 	}

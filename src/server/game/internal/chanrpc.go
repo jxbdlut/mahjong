@@ -17,7 +17,13 @@ func rpcNewAgent(args []interface{}) {
 }
 
 func rpcCloseAgent(args []interface{}) {
+	if args == nil {
+		return
+	}
 	a := args[0].(gate.Agent)
+	if a == nil {
+		return
+	}
 	uid := a.UserData().(*userdata.UserData).Uid
 	tid := a.UserData().(*userdata.UserData).Tid
 	if table, ok := tables[tid]; ok {

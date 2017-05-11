@@ -6,6 +6,7 @@ message LoginReq
 {
     uint64 uid = 1;
     string passwd = 2;
+    string name = 3;
 }
 
 message LoginRsp
@@ -36,4 +37,12 @@ message JoinTableRsp
 {
     int32 err_code = 1;
     string err_msg = 2;
+}
+
+message UserJoinTableMsg
+{
+    uint32 tid = 1;
+    uint64 uid = 2;
+    string name = 3;
+    int32 pos = 4;
 }

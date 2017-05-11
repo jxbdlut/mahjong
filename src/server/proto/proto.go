@@ -15,6 +15,7 @@ func init() {
 	Processor.Register(&CreateTableRsp{})
 	Processor.Register(&JoinTableReq{})
 	Processor.Register(&JoinTableRsp{})
+	//Processor.Register(&UserJoinTableMsg{})
 
 	Processor.Range(printRegistedMsg)
 }

@@ -63,12 +63,18 @@ func handlerJoinTable(args []interface{}) {
 			tables[tid].agents = append(tables[tid].agents, a)
 			rsp.ErrCode = 0
 			rsp.ErrMsg = "join successed!"
+			//table.Broadcast(&proto.UserJoinTableMsg{
+			//	Uid:req.Uid,
+			//	Name:a.UserData().(*userdata.UserData).Name,
+			//	Tid:tid,
+			//})
 		}
 	} else {
 		log.Error("table is not exist, tid:%v", tid)
 		rsp.ErrCode = -1
 		rsp.ErrMsg = "table is not exist"
 	}
+
 	a.WriteMsg(&rsp)
 }
 
