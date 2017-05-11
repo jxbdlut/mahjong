@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package proto;
+
+
+message mahjongReq
+{
+    int32 version = 1;
+    uint64 uid = 2;
+    uint32 seq = 3;
+    string module = 4;
+    uint32 cmd = 5;
+}
+
+message mahjongRsp
+{
+    int32 err_code = 1;
+    string err_msg= 2;
+    uint32 seq = 3;
+    string module = 4;
+    uint32 cmd = 5;
+    bytes body = 6;
+}
