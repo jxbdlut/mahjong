@@ -13,9 +13,9 @@ import (
 	"time"
 
 	lconf "github.com/name5566/leaf/conf"
+	"github.com/name5566/leaf/gate"
 	"github.com/name5566/leaf/log"
 	"github.com/name5566/leaf/network"
-	"github.com/name5566/leaf/network/protobuf"
 	"server/conf"
 	"server/proto"
 )
@@ -93,6 +93,15 @@ func HandlerBroadCastMsg(args []interface{}) {
 	log.Debug("broadcast:%v", msg)
 }
 
+func HandlerDrawCardMsg(args []interface{}) {
+	msg := args[0]
+	a := args[1].(gate.Agent)
+	a.WriteMsg(&proto.DrawCardRsp{
+		Card: msg.(*proto.DrawCardReq).Card,
+	})
+	log.Debug("broadcast:%v", msg)
+}
+
 func (a *agent) Run() {
 	if a.Login() != nil {
 		return
@@ -115,16 +124,16 @@ func (a *agent) Run() {
 	for {
 		msg, err := a.ReadMsg()
 		if err != nil {
-			log.Error("read message: ", err)
+			log.Error("read message:%v", err)
 			break
 		}
 
-		log.Debug("msg type:%v, value:%v", reflect.TypeOf(msg), msg)
 		err = a.Processor.Route(msg, a)
 		if err != nil {
 			log.Debug("route message error: %v", err)
 			break
 		}
+		log.Debug("msg type:%v, value:%v", reflect.TypeOf(msg), msg)
 	}
 }
 
@@ -158,7 +167,9 @@ func (a *agent) ReadMsg() (interface{}, error) {
 			log.Debug("Unmarshal data:%v", err)
 			return nil, err
 		}
-		err = a.Processor.Route(msg, a)
+		//if err = a.Processor.Route(msg, a); err != nil {
+		//	log.Error("Route msg:%v err:%v", reflect.TypeOf(msg), err)
+		//}
 		return msg, nil
 	}
 	return nil, errors.New("processor is nil")
@@ -219,18 +230,9 @@ func main() {
 		client.LenMsgLen = 2
 		client.MaxMsgLen = math.MaxUint32
 		client.NewAgent = func(conn *network.TCPConn) network.Agent {
-			processor := protobuf.NewProcessor()
-			processor.Register(&proto.LoginReq{})
-			processor.Register(&proto.LoginRsp{})
-			processor.Register(&proto.CreateTableReq{})
-			processor.Register(&proto.CreateTableRsp{})
-			processor.Register(&proto.JoinTableReq{})
-			processor.Register(&proto.JoinTableRsp{})
-			processor.Register(&proto.UserJoinTableMsg{})
-			processor.Register(&proto.DrawCardReq{})
-			processor.Register(&proto.DrawCardRsp{})
 			proto.Processor.SetHandler(&proto.UserJoinTableMsg{}, HandlerBroadCastMsg)
-			a := &agent{uid: uid, conn: conn, Processor: processor, master: is_master}
+			proto.Processor.SetHandler(&proto.DrawCardReq{}, HandlerDrawCardMsg)
+			a := &agent{uid: uid, conn: conn, Processor: proto.Processor, master: is_master}
 			return a
 		}
 

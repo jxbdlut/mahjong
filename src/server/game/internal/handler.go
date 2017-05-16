@@ -17,7 +17,10 @@ var (
 func init() {
 	handler(&proto.CreateTableReq{}, handlerCreateTable)
 	handler(&proto.JoinTableReq{}, handlerJoinTable)
-	handler(&proto.DrawCardRsp{}, handlerDrawCardRsp)
+	handler(&proto.DrawCardRsp{}, handlerPlayerRsp)
+	handler(&proto.HuRsp{}, handlerPlayerRsp)
+	handler(&proto.EatRsp{}, handlerPlayerRsp)
+	handler(&proto.PongRsp{}, handlerPlayerRsp)
 	tables = make(map[uint32]*Table)
 }
 
@@ -35,10 +38,10 @@ func handlerCreateTable(args []interface{}) {
 		Uid: req.Uid,
 		Tid: tid,
 	})
-	table.addAgent(a, true)
-	go table.run()
+	table.AddAgent(a, true)
+	go table.Run()
 	tables[tid] = table
-	log.Debug("create table Uid:%v", req.Uid)
+	log.Debug("create table uid:%v", req.Uid)
 	a.WriteMsg(&proto.CreateTableRsp{
 		ErrCode: 0,
 		ErrMsg:  "successed!",
@@ -53,7 +56,7 @@ func handlerJoinTable(args []interface{}) {
 
 	tid := req.TableId
 	if table, ok := tables[tid]; ok {
-		if _, ok := table.getPlayerIndex(req.Uid); ok == nil {
+		if _, ok := table.GetPlayerIndex(req.Uid); ok == nil {
 			rsp.ErrCode = 10000
 			rsp.ErrMsg = "you areadly in table"
 		} else {
@@ -61,7 +64,7 @@ func handlerJoinTable(args []interface{}) {
 				Uid: req.Uid,
 				Tid: tid,
 			})
-			tables[tid].addAgent(a, false)
+			tables[tid].AddAgent(a, false)
 			rsp.ErrCode = 0
 			rsp.ErrMsg = "join successed!"
 			table.BroadcastExceptMe(&proto.UserJoinTableMsg{
@@ -78,14 +81,23 @@ func handlerJoinTable(args []interface{}) {
 	a.WriteMsg(&rsp)
 }
 
-func handlerDrawCardRsp(args []interface{}) {
+func handlerPlayerRsp(args []interface{}) {
 	rsp := args[0].(*proto.DrawCardRsp)
 	a := args[1].(gate.Agent)
 	tid := a.UserData().(*userdata.UserData).Tid
 	uid := a.UserData().(*userdata.UserData).Uid
 	table := tables[tid]
-	if player, err := table.getPlayer(uid); err == nil {
-		player.HandlerDrawRsp(rsp)
+	if player, err := table.GetPlayer(uid); err == nil {
+		switch reflect.TypeOf(rsp) {
+		case reflect.TypeOf(&proto.HuRsp{}):
+			player.HandlerHuRsp(rsp)
+		case reflect.TypeOf(&proto.DrawCardRsp{}):
+			player.HandlerDrawRsp(rsp)
+		case reflect.TypeOf(&proto.EatRsp{}):
+			player.HandlerEatRsp(rsp)
+		case reflect.TypeOf(&proto.PongRsp{}):
+			player.HandlerPongRsp(rsp)
+		}
 	}
 }
 

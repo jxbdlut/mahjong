@@ -27,8 +27,8 @@ func rpcCloseAgent(args []interface{}) {
 	uid := a.UserData().(*userdata.UserData).Uid
 	tid := a.UserData().(*userdata.UserData).Tid
 	if table, ok := tables[tid]; ok {
-		table.removeAgent(a)
+		table.RemoveAgent(a)
 		a.Destroy()
 	}
-	log.Debug("close Agent Uid: %v, tid:%v", uid, tid)
+	log.Debug("close agent uid: %v, tid:%v", uid, tid)
 }

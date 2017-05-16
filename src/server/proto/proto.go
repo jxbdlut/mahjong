@@ -1,9 +1,7 @@
 package proto
 
 import (
-	"github.com/name5566/leaf/log"
 	"github.com/name5566/leaf/network/protobuf"
-	"reflect"
 )
 
 var Processor = protobuf.NewProcessor()
@@ -18,10 +16,16 @@ func init() {
 	Processor.Register(&UserJoinTableMsg{})
 	Processor.Register(&DrawCardReq{})
 	Processor.Register(&DrawCardRsp{})
+	Processor.Register(&HuReq{})
+	Processor.Register(&HuRsp{})
+	Processor.Register(&EatReq{})
+	Processor.Register(&EatRsp{})
+	Processor.Register(&PongReq{})
+	Processor.Register(&PongRsp{})
 
-	Processor.Range(printRegistedMsg)
+	//Processor.Range(printRegistedMsg)
 }
 
-func printRegistedMsg(id uint16, t reflect.Type) {
-	log.Debug("id:%v, type:%v", id, t)
-}
+//func printRegistedMsg(id uint16, t reflect.Type) {
+//	log.Debug("id:%v, type:%v", id, t)
+//}

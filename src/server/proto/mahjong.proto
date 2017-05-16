@@ -49,6 +49,45 @@ message DrawCardRsp
     uint32 card = 1;
 }
 
+message HuReq
+{
+    uint32 card = 1;
+}
+
+message HuRsp
+{
+    bool ok = 1;
+}
+
+message Eat
+{
+    repeated int32 hand_card = 1;
+    repeated int32 wave_card = 2;
+}
+
+message EatReq
+{
+    repeated Eat eat = 1;
+}
+
+message EatRsp
+{
+    Eat eat = 1;
+    int32 dis_card = 2;
+}
+
+message PongReq
+{
+    int32 card = 1;
+    int32 count = 2;
+}
+
+message PongRsp
+{
+    int32 count = 1;
+    int32 dis_card = 2;
+}
+
 message UserJoinTableMsg
 {
     uint32 tid = 1;
