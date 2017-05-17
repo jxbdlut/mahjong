@@ -214,6 +214,7 @@ func (t *Table) Play() {
 			t.DisCard(player, discard)
 			t.round += 1
 		}
+		time.Sleep(2 * time.Second)
 	}
 }
 
@@ -228,7 +229,7 @@ func (t *Table) Run() {
 			t.Clear()
 			t.Play()
 		}
-		log.Debug("Table tid:%v runing, play_count；%v, players num:%v, left_cards num:%d", t.tid, t.play_count, len(t.players), len(t.left_cards))
-		time.Sleep(1 * time.Second)
+		log.Debug("Table tid:%v runing, play_count:%v, players num:%v, left_cards num:%d", t.tid, t.play_count, len(t.players), len(t.left_cards))
+		time.Sleep(time.Second)
 	}
 }

@@ -4,20 +4,19 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
+	lconf "github.com/name5566/leaf/conf"
+	"github.com/name5566/leaf/gate"
+	"github.com/name5566/leaf/log"
+	"github.com/name5566/leaf/network"
 	"math"
 	"net"
 	"os"
 	"os/signal"
 	"reflect"
-	"strconv"
-	"time"
-
-	lconf "github.com/name5566/leaf/conf"
-	"github.com/name5566/leaf/gate"
-	"github.com/name5566/leaf/log"
-	"github.com/name5566/leaf/network"
 	"server/conf"
 	"server/proto"
+	"strconv"
+	"time"
 )
 
 type agent struct {
@@ -99,7 +98,26 @@ func HandlerDrawCardMsg(args []interface{}) {
 	a.WriteMsg(&proto.DrawCardRsp{
 		Card: msg.(*proto.DrawCardReq).Card,
 	})
-	log.Debug("broadcast:%v", msg)
+	log.Debug("HandlerDrawCardMsg:%v", msg)
+}
+
+func HandlerEatMsg(args []interface{}) {
+	msg := args[0]
+	a := args[1].(gate.Agent)
+	a.WriteMsg(&proto.EatRsp{
+		Eat:msg.(*proto.EatReq).GetEat()[0],
+		DisCard:0,
+	})
+	log.Debug("HandlerEatMsg:%v", msg)
+}
+
+func HandlerPongMsg(args []interface{}) {
+	msg := args[0]
+	a := args[1].(gate.Agent)
+	a.WriteMsg(&proto.PongRsp{
+		Count: msg.(*proto.PongReq).Count,
+		DisCard:0,
+	})
 }
 
 func (a *agent) Run() {
@@ -232,6 +250,8 @@ func main() {
 		client.NewAgent = func(conn *network.TCPConn) network.Agent {
 			proto.Processor.SetHandler(&proto.UserJoinTableMsg{}, HandlerBroadCastMsg)
 			proto.Processor.SetHandler(&proto.DrawCardReq{}, HandlerDrawCardMsg)
+			proto.Processor.SetHandler(&proto.EatReq{}, HandlerEatMsg)
+			proto.Processor.SetHandler(&proto.PongReq{}, HandlerPongMsg)
 			a := &agent{uid: uid, conn: conn, Processor: proto.Processor, master: is_master}
 			return a
 		}

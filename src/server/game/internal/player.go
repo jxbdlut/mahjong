@@ -1,11 +1,10 @@
 package internal
 
 import (
-	"net"
-
 	"errors"
 	"github.com/name5566/leaf/gate"
 	"github.com/name5566/leaf/log"
+	"net"
 	"server/proto"
 	"time"
 )
@@ -21,6 +20,7 @@ type Player struct {
 	master          bool
 	online          bool
 	table           *Table
+	eat             []*proto.Eat
 }
 
 var (
@@ -109,6 +109,7 @@ func (p *Player) discard(card int) {
 
 func (p *Player) draw() int {
 	card := p.table.DrawCard()
+	log.Debug("uid:%v draw card:%v", p.uid, card)
 	p.FeedCard([]int{card})
 	result := p.analyze_gang()
 	if len(result) > 0 {
@@ -129,12 +130,19 @@ func (p *Player) draw() int {
 		return 0
 	}
 
-	return int(rsp.(*proto.DrawCardRsp).Card)
+	dis_card := rsp.(*proto.DrawCardRsp).Card
+	log.Debug("uid:%v, cards:%v", p.uid, p.cards)
+	if !p.ValidedDisCard(int(dis_card)) {
+		log.Error("uid:%v, invalid discard:%v", p.uid, dis_card)
+		return card
+	}
+	p.discard(int(dis_card))
+	return int(dis_card)
 }
 
 func (p *Player) HandlerDrawRsp(msg interface{}) {
 	p.online = true
-	log.Debug("HandlerDrawRsp msg:%v", msg)
+	log.Debug("uid:%d HandlerDrawRsp msg:%v", p.uid, msg)
 	draw_rsp_chan <- msg
 }
 
@@ -159,7 +167,6 @@ func (p *Player) HandlerPongRsp(msg interface{}) {
 func (p *Player) WaitDrawRsp() (interface{}, error) {
 	select {
 	case msg := <-draw_rsp_chan:
-		p.discard(int(msg.(*proto.DrawCardRsp).Card))
 		return msg, nil
 	case <-time.After(10 * time.Second):
 		return nil, errors.New("time out")
@@ -236,6 +243,22 @@ func (p *Player) CheckHu(card int) bool {
 	}
 }
 
+func (p *Player) ValidedDisCard(card int) bool {
+	if p.count(card) == 0 {
+		return false
+	}
+	return true
+}
+
+func (p *Player) ValidedEat(eat *proto.Eat) bool {
+	for _, can_eat := range p.eat {
+		if can_eat == eat {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *Player) CheckEat(card int) (*proto.Eat, int, bool) {
 	m := card / 100
 	if m == 4 || card == p.table.hun_card {
@@ -266,6 +289,7 @@ func (p *Player) CheckEat(card int) (*proto.Eat, int, bool) {
 	}
 	if len(req.Eat) > 0 {
 		log.Debug("eat req:%v", req)
+		p.eat = req.Eat
 		p.WriteMsg(&req)
 		rsp, err := p.WaitEatRsp()
 		if err != nil {
@@ -274,6 +298,14 @@ func (p *Player) CheckEat(card int) (*proto.Eat, int, bool) {
 		}
 		eat := rsp.(*proto.EatRsp).Eat
 		dis_card := rsp.(*proto.EatRsp).DisCard
+		if !p.ValidedEat(eat) {
+			log.Error("uid:%v, invalid eat:%v", p.uid, eat)
+			return nil, 0, false
+		}
+		if !p.ValidedDisCard(int(dis_card)) {
+			log.Error("uid:%v, invalid discard:%v", p.uid, dis_card)
+			return nil, 0, false
+		}
 		return eat, int(dis_card), true
 	} else {
 		return nil, 0, false

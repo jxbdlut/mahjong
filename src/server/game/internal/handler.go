@@ -82,7 +82,7 @@ func handlerJoinTable(args []interface{}) {
 }
 
 func handlerPlayerRsp(args []interface{}) {
-	rsp := args[0].(*proto.DrawCardRsp)
+	rsp := args[0]
 	a := args[1].(gate.Agent)
 	tid := a.UserData().(*userdata.UserData).Tid
 	uid := a.UserData().(*userdata.UserData).Uid
