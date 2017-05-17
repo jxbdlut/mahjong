@@ -98,13 +98,15 @@ func (p *Player) analyze_gang() []int {
 	return result
 }
 
-func (p *Player) discard(card int) {
+func (p *Player) drop(card int) {
 	for i, c := range p.cards {
 		if c == card {
 			p.cards = append(p.cards[:i], p.cards[i+1:]...)
 			break
 		}
 	}
+	p.prewin_cards = p.table.GetTingCards(p.cards)
+	//log.Debug("uid:%v, prewin_cards:%v", p.uid, p.prewin_cards)
 }
 
 func (p *Player) draw() int {
@@ -126,17 +128,17 @@ func (p *Player) draw() int {
 	rsp, err := p.WaitDrawRsp()
 	if err != nil {
 		p.SetOnline(false)
-		log.Debug("err:%v", err)
+		log.Debug("WaitDrawRsp err:%v", err)
 		return 0
 	}
 
 	dis_card := rsp.(*proto.DrawCardRsp).Card
-	log.Debug("uid:%v, cards:%v", p.uid, p.cards)
+	log.Debug("uid:%v, cards:%v, cards len:%v", p.uid, p.cards, len(p.cards))
 	if !p.ValidedDisCard(int(dis_card)) {
-		log.Error("uid:%v, invalid discard:%v", p.uid, dis_card)
+		log.Error("uid:%v, invalid drop:%v", p.uid, dis_card)
 		return card
 	}
-	p.discard(int(dis_card))
+	p.drop(int(dis_card))
 	return int(dis_card)
 }
 
@@ -204,7 +206,7 @@ func (p *Player) Hu(card int) {
 
 }
 
-func (p *Player) Pong(card int, count int) {
+func (p *Player) Pong(card int, count int, discard int) {
 	var cards []int32
 	for i := 0; i < count-1; i++ {
 		cards = append(cards, int32(card))
@@ -212,11 +214,13 @@ func (p *Player) Pong(card int, count int) {
 	p.DelCards(cards)
 	cards = append(cards, int32(card))
 	p.AddPongCards(cards)
+	p.drop(discard)
 }
 
-func (p *Player) Eat(eat *proto.Eat) {
+func (p *Player) Eat(eat *proto.Eat, discard int) {
 	p.AddPongCards(eat.WaveCard)
 	p.DelCards(eat.HandCard)
+	p.drop(discard)
 }
 
 func (p *Player) CheckHu(card int) bool {
@@ -229,7 +233,7 @@ func (p *Player) CheckHu(card int) bool {
 		hu = true
 	}
 	if hu {
-		p.WriteMsg(&proto.DrawCardReq{
+		p.WriteMsg(&proto.HuReq{
 			Card: uint32(card),
 		})
 		rsp, err := p.WaitHuRsp()
@@ -252,17 +256,17 @@ func (p *Player) ValidedDisCard(card int) bool {
 
 func (p *Player) ValidedEat(eat *proto.Eat) bool {
 	for _, can_eat := range p.eat {
-		if can_eat == eat {
+		if can_eat.Equal(eat) {
 			return true
 		}
 	}
 	return false
 }
 
-func (p *Player) CheckEat(card int) (*proto.Eat, int, bool) {
+func (p *Player) CheckEat(card int) (int, bool) {
 	m := card / 100
 	if m == 4 || card == p.table.hun_card {
-		return nil, 0, false
+		return 0, false
 	}
 	c_1 := p.count(card - 1)
 	c_2 := p.count(card - 2)
@@ -270,19 +274,20 @@ func (p *Player) CheckEat(card int) (*proto.Eat, int, bool) {
 	c2 := p.count(card + 2)
 
 	var req proto.EatReq
-	var eat proto.Eat
-
 	if c_1 > 0 && c_2 > 0 && (p.table.hun_card < card-2 || p.table.hun_card > card) {
+		var eat proto.Eat
 		eat.HandCard = []int32{int32(card - 2), int32(card - 1)}
 		eat.WaveCard = []int32{int32(card - 2), int32(card - 1), int32(card)}
 		req.Eat = append(req.Eat, &eat)
 	}
 	if c_1 > 0 && c1 > 0 && (p.table.hun_card < card-1 || p.table.hun_card > card+1) {
+		var eat proto.Eat
 		eat.HandCard = []int32{int32(card - 1), int32(card + 1)}
 		eat.WaveCard = []int32{int32(card - 1), int32(card), int32(card + 1)}
 		req.Eat = append(req.Eat, &eat)
 	}
 	if c1 > 0 && c2 > 0 && (p.table.hun_card < card || p.table.hun_card > card+2) {
+		var eat proto.Eat
 		eat.HandCard = []int32{int32(card + 1), int32(card + 2)}
 		eat.WaveCard = []int32{int32(card), int32(card + 1), int32(card + 2)}
 		req.Eat = append(req.Eat, &eat)
@@ -294,21 +299,22 @@ func (p *Player) CheckEat(card int) (*proto.Eat, int, bool) {
 		rsp, err := p.WaitEatRsp()
 		if err != nil {
 			log.Debug("WaitEatRsp err:%v", err)
-			return nil, 0, false
+			return 0, false
 		}
 		eat := rsp.(*proto.EatRsp).Eat
 		dis_card := rsp.(*proto.EatRsp).DisCard
 		if !p.ValidedEat(eat) {
 			log.Error("uid:%v, invalid eat:%v", p.uid, eat)
-			return nil, 0, false
+			return 0, false
 		}
 		if !p.ValidedDisCard(int(dis_card)) {
-			log.Error("uid:%v, invalid discard:%v", p.uid, dis_card)
-			return nil, 0, false
+			log.Error("uid:%v, invalid drop:%v", p.uid, dis_card)
+			return 0, false
 		}
-		return eat, int(dis_card), true
+		p.Eat(eat, int(dis_card))
+		return int(dis_card), true
 	} else {
-		return nil, 0, false
+		return 0, false
 	}
 }
 
@@ -329,10 +335,18 @@ func (p *Player) CheckPong(card int) (int, int) {
 		if rsp_count == 0 {
 			return 0, 0
 		} else if rsp_count == 2 {
-			p.Pong(card, 2)
+			if !p.ValidedDisCard(int(dis_card)) {
+				log.Error("uid:%v, invalid drop:%v", p.uid, dis_card)
+				return 0, 0
+			}
+			p.Pong(card, 2, int(dis_card))
 			return int(dis_card), 2
 		} else if rsp_count == 3 && count == 3 {
-			p.Pong(card, 3)
+			if !p.ValidedDisCard(int(dis_card)) {
+				log.Error("uid:%v, invalid drop:%v", p.uid, dis_card)
+				return 0, 0
+			}
+			p.Pong(card, 3, int(dis_card))
 			return p.draw(), 3
 		}
 	}

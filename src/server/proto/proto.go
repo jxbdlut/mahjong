@@ -29,3 +29,20 @@ func init() {
 //func printRegistedMsg(id uint16, t reflect.Type) {
 //	log.Debug("id:%v, type:%v", id, t)
 //}
+
+func (e *Eat) Equal(eat *Eat) bool {
+	if len(e.HandCard) != len(eat.HandCard) || len(e.WaveCard) != len(eat.WaveCard) {
+		return false
+	}
+	for i, card := range e.WaveCard {
+		if card != eat.WaveCard[i] {
+			return false
+		}
+	}
+	for i, card := range e.HandCard {
+		if card != eat.HandCard[i] {
+			return false
+		}
+	}
+	return true
+}
