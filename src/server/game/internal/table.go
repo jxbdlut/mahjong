@@ -2,13 +2,12 @@ package internal
 
 import (
 	"errors"
-	"time"
-
 	"github.com/name5566/leaf/gate"
 	"github.com/name5566/leaf/log"
 	"math/rand"
 	"server/userdata"
 	"sort"
+	"time"
 )
 
 type Table struct {
@@ -264,7 +263,13 @@ func (t *Table) Check2Combine(card1 int, card2 int) bool {
 	return false
 }
 
-func (t *Table) Remove(cards []int, card1 int, card2 int, card3 int) {
+func (t *Table) Copy(cards []int) []int {
+	cards_copy := make([]int, len(cards))
+	copy(cards_copy, cards)
+	return cards
+}
+
+func (t *Table) Remove(cards []int, card1 int, card2 int, card3 int) []int {
 	if card1 != 0 {
 		if i, err := GetIndex(cards, card1); err == nil {
 			cards = append(cards[:i], cards[i+1:]...)
@@ -280,6 +285,7 @@ func (t *Table) Remove(cards []int, card1 int, card2 int, card3 int) {
 			cards = append(cards[:i], cards[i+1:]...)
 		}
 	}
+	return cards
 }
 
 func (t *Table) GetNeedHunInSub(sub_cards []int, hun_num int, need_hun_count int) int {
@@ -328,11 +334,10 @@ func (t *Table) GetNeedHunInSub(sub_cards []int, hun_num int, need_hun_count int
 				tmp1, tmp2, tmp3 := sub_cards[0], sub_cards[i], sub_cards[i+1]
 				if t.Check3Combine(tmp1, tmp2, tmp3) {
 					// 拷贝
-					tmp_cards := sub_cards[:]
-					log.Debug("tmp_cards:%v, tmp1:%v, tmp2:%v, tmp3:%v", tmp_cards, tmp1, tmp2, tmp3)
-					t.Remove(tmp_cards, tmp1, tmp2, tmp3)
-					log.Debug("tmp_cards:%v, tmp1:%v, tmp2:%v, tmp3:%v", tmp_cards, tmp1, tmp2, tmp3)
-					return 4
+					tmp_cards := t.Copy(sub_cards)
+					//log.Debug("tmp_cards:%v", tmp_cards)
+					tmp_cards = t.Remove(tmp_cards, tmp1, tmp2, tmp3)
+					//log.Debug("tmp_cards:%v", tmp_cards)
 					need_hun_count = t.GetNeedHunInSub(tmp_cards, hun_num, need_hun_count)
 				}
 			}
@@ -362,8 +367,8 @@ func (t *Table) GetNeedHunInSub(sub_cards []int, hun_num int, need_hun_count int
 					if mius < 3 {
 						tmp1, tmp2 := sub_cards[0], sub_cards[i]
 						// 拷贝
-						tmp_cards := sub_cards[:]
-						t.Remove(tmp_cards, tmp1, tmp2, 0)
+						tmp_cards := t.Copy(sub_cards)
+						tmp_cards = t.Remove(tmp_cards, tmp1, tmp2, 0)
 						need_hun_count = t.GetNeedHunInSub(tmp_cards, hun_num+1, need_hun_count)
 						if mius >= 1 {
 							break
@@ -375,7 +380,7 @@ func (t *Table) GetNeedHunInSub(sub_cards []int, hun_num int, need_hun_count int
 			}
 		}
 		// 第一个自己一铺
-		if hun_num + t.GetModNeedNum(len_sub_cards-1,false) + 2 < need_hun_count {
+		if hun_num+t.GetModNeedNum(len_sub_cards-1, false)+2 < need_hun_count {
 			//拷贝
 			need_hun_count = t.GetNeedHunInSub(sub_cards[1:], hun_num+2, need_hun_count)
 		}
@@ -385,7 +390,7 @@ func (t *Table) GetNeedHunInSub(sub_cards []int, hun_num int, need_hun_count int
 
 func (t *Table) GetNeedHunInSubWithEye(cards []int, min_need_num int) int {
 	// 拷贝
-	cards_copy := cards[:]
+	cards_copy := t.Copy(cards)
 	len_cards := len(cards_copy)
 	if len_cards == 0 {
 		return 2
@@ -394,25 +399,25 @@ func (t *Table) GetNeedHunInSubWithEye(cards []int, min_need_num int) int {
 		return min_need_num
 	}
 	for i := 0; i < len_cards; i++ {
-		if i == len_cards - 1 { // 如果是最后一张牌
+		if i == len_cards-1 { // 如果是最后一张牌
 			//拷贝
-			tmp_cards := cards_copy[:]
-			t.Remove(tmp_cards, cards_copy[i], 0, 0)
-			min_need_num = min(min_need_num, t.GetNeedHunInSub(tmp_cards, 0, 4) + 1)
+			tmp_cards := t.Copy(cards_copy)
+			tmp_cards = t.Remove(tmp_cards, cards_copy[i], 0, 0)
+			min_need_num = min(min_need_num, t.GetNeedHunInSub(tmp_cards, 0, 4)+1)
 		} else {
-			if i + 2 == len_cards || cards_copy[i] % 10 != cards_copy[i+2]%10 {
+			if i+2 == len_cards || cards_copy[i]%10 != cards_copy[i+2]%10 {
 				if t.Check2Combine(cards_copy[i], cards_copy[i+1]) {
 					// 拷贝
-					tmp_cards := cards_copy[:]
-					t.Remove(tmp_cards, cards_copy[i], cards_copy[i+1], 0)
+					tmp_cards := t.Copy(cards_copy)
+					tmp_cards = t.Remove(tmp_cards, cards_copy[i], cards_copy[i+1], 0)
 					min_need_num = min(min_need_num, t.GetNeedHunInSub(tmp_cards, 0, 4))
 				}
 			}
 			if cards_copy[i]%10 != cards_copy[i+1]%10 {
 				//拷贝
-				tmp_cards := cards_copy[:]
-				t.Remove(tmp_cards, cards_copy[i], 0, 0)
-				min_need_num = min(min_need_num, t.GetNeedHunInSub(tmp_cards, 0, 4) + 1)
+				tmp_cards := t.Copy(cards_copy)
+				tmp_cards = t.Remove(tmp_cards, cards_copy[i], 0, 0)
+				min_need_num = min(min_need_num, t.GetNeedHunInSub(tmp_cards, 0, 4)+1)
 			}
 		}
 	}
@@ -476,7 +481,7 @@ func (t *Table) SearchRange(cards []int) (int, int) {
 
 func (t *Table) CanHu(cards []int, hun_num int) bool {
 	// 拷贝
-	cards_copy := cards[:]
+	cards_copy := t.Copy(cards)
 	len_cards := len(cards_copy)
 	if len_cards == 0 {
 		if hun_num >= 2 {
@@ -490,23 +495,23 @@ func (t *Table) CanHu(cards []int, hun_num int) bool {
 		return false
 	}
 	sort.Ints(cards_copy)
-	for i:= 0; i < len_cards; i++ {
+	for i := 0; i < len_cards; i++ {
 		// 如果是最后一张牌
-		if i + 1 == len_cards {
+		if i+1 == len_cards {
 			if hun_num > 0 {
 				// 拷贝
-				tmp_cards := cards_copy[:]
-				t.Remove(tmp_cards, cards_copy[i], 0, 0)
-				if t.GetNeedHunInSub(tmp_cards, 0, 4) <= hun_num - 1 {
+				tmp_cards := t.Copy(cards_copy)
+				tmp_cards = t.Remove(tmp_cards, cards_copy[i], 0, 0)
+				if t.GetNeedHunInSub(tmp_cards, 0, 4) <= hun_num-1 {
 					return true
 				}
 			}
 		} else {
-			if i + 2 == len_cards || cards_copy[i]%10 != cards_copy[i+2]%10 {
+			if i+2 == len_cards || cards_copy[i]%10 != cards_copy[i+2]%10 {
 				if t.Check2Combine(cards_copy[i], cards_copy[i+1]) {
 					// 拷贝
-					tmp_cards := cards_copy[:]
-					t.Remove(tmp_cards, cards_copy[i], cards_copy[i+1], 0)
+					tmp_cards := t.Copy(cards_copy)
+					tmp_cards = t.Remove(tmp_cards, cards_copy[i], cards_copy[i+1], 0)
 					if t.GetNeedHunInSub(tmp_cards, 0, 4) <= hun_num {
 						return true
 					}
@@ -514,9 +519,9 @@ func (t *Table) CanHu(cards []int, hun_num int) bool {
 			}
 			if hun_num > 0 && cards_copy[i]%10 != cards_copy[i+1]%10 {
 				// 拷贝
-				tmp_cards := cards_copy[:]
-				t.Remove(tmp_cards, cards_copy[i], 0, 0)
-				if t.GetNeedHunInSub(tmp_cards, 0, 4) <= hun_num - 1 {
+				tmp_cards := t.Copy(cards_copy)
+				tmp_cards = t.Remove(tmp_cards, cards_copy[i], 0, 0)
+				if t.GetNeedHunInSub(tmp_cards, 0, 4) <= hun_num-1 {
 					return true
 				}
 			}
@@ -564,8 +569,9 @@ func (t *Table) GetTingCards(cards []int) map[int]interface{} {
 			if ok := result[card]; ok != nil {
 				continue
 			}
-			tmp_cards := separate_results[i+1][:]
+			tmp_cards := t.Copy(separate_results[i+1])
 			tmp_cards = append(tmp_cards, card)
+			sort.Ints(tmp_cards)
 			if t.CanHu(tmp_cards, need_hun_with_eye_arr[i]-1) {
 				result[card] = card
 			}
@@ -578,7 +584,7 @@ func (t *Table) GetTingCards(cards []int) map[int]interface{} {
 					if ok := result[card]; ok != nil {
 						continue
 					}
-					tmp_cards := separate_results[i+1][:]
+					tmp_cards := t.Copy(separate_results[i+1])
 					tmp_cards = append(tmp_cards, card)
 					sort.Ints(tmp_cards)
 					if t.GetNeedHunInSub(tmp_cards, 0, 4) <= need_hun_arr[j]-1 {
@@ -598,6 +604,9 @@ func (t *Table) Play() {
 	t.Deal()
 	for len(t.left_cards) > 10 && t.win_player == nil && len(t.players) > 0 {
 		player := t.players[t.play_turn]
+		log.Debug("uid:%v, cards:%v", player.uid, player.cards)
+		t.Remove(player.cards, player.cards[0], player.cards[0], player.cards[0])
+		log.Debug("uid:%v, cards:%v", player.uid, player.cards)
 		t.play_turn = (t.play_turn + 1) % len(t.players)
 		discard := player.draw()
 		if discard != 0 {

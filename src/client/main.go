@@ -217,6 +217,12 @@ func (a *agent) SetUserData(data interface{}) {
 	a.userData = data
 }
 
+func test() {
+	array := []int {101, 102, 103}
+	a, b, c := array[0]/100, array[0]%10, array[1]%10
+	log.Debug("a:%v, b:%v, c:%v", a, b, c)
+}
+
 func main() {
 	lconf.LogLevel = conf.Server.LogLevel
 	lconf.LogPath = conf.Server.LogPath
@@ -232,6 +238,7 @@ func main() {
 		defer logger.Close()
 	}
 
+	test()
 	table_start := 10000
 	for i := 0; i < 4; i++ {
 		uid := uint64(table_start)

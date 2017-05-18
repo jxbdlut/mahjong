@@ -7,6 +7,7 @@ import (
 	"net"
 	"server/proto"
 	"time"
+	"sort"
 )
 
 type Player struct {
@@ -46,6 +47,7 @@ func (p *Player) Clear() {
 
 func (p *Player) FeedCard(cards []int) {
 	p.cards = append(p.cards, cards...)
+	sort.Ints(p.cards)
 	p.separate_result = p.table.SeparateCards(p.cards)
 }
 
@@ -106,7 +108,7 @@ func (p *Player) drop(card int) {
 		}
 	}
 	p.prewin_cards = p.table.GetTingCards(p.cards)
-	//log.Debug("uid:%v, prewin_cards:%v", p.uid, p.prewin_cards)
+	log.Debug("uid:%v, prewin_cards:%v, call_time:%v", p.uid, p.prewin_cards, p.table.call_time)
 }
 
 func (p *Player) draw() int {
