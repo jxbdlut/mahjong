@@ -6,8 +6,8 @@ import (
 	"github.com/name5566/leaf/log"
 	"net"
 	"server/proto"
-	"time"
 	"sort"
+	"time"
 )
 
 type Player struct {
@@ -43,6 +43,7 @@ func NewPlayer(agent gate.Agent, uid uint64) *Player {
 func (p *Player) Clear() {
 	p.cards = append(p.cards[:0], p.cards[:0]...)
 	p.pong_cards = append(p.pong_cards[:0], p.pong_cards[:0]...)
+	p.prewin_cards = make(map[int]interface{})
 	p.separate_result = [5][]int{}
 }
 
@@ -108,8 +109,11 @@ func (p *Player) drop(card int) {
 			break
 		}
 	}
-	p.prewin_cards = p.table.GetTingCards(p.cards)
-	log.Debug("uid:%v, prewin_cards:%v, call_time:%v", p.uid, p.prewin_cards, p.table.call_time)
+	p.separate_result = p.table.SeparateCards(p.cards)
+	p.prewin_cards = p.table.GetTingCards(p)
+	if len(p.prewin_cards) > 0 {
+		log.Debug("uid:%v, prewin_cards:%v, call_time:%v", p.uid, p.prewin_cards, p.table.call_time)
+	}
 }
 
 func (p *Player) Deal() {
@@ -138,7 +142,6 @@ func (p *Player) Deal() {
 
 func (p *Player) draw() int {
 	card := p.table.DrawCard()
-	log.Debug("uid:%v draw card:%v", p.uid, card)
 	p.FeedCard([]int{card})
 	result := p.analyze_gang()
 	if len(result) > 0 {
@@ -148,9 +151,11 @@ func (p *Player) draw() int {
 		p.Hu(card)
 		return 0
 	} else {
-		p.WriteMsg(&proto.DrawCardReq{
+		req := &proto.DrawCardReq{
 			Card: uint32(card),
-		})
+		}
+		log.Debug("uid:%v, draw req:%v", p.uid, req)
+		p.WriteMsg(req)
 	}
 	rsp, err := p.WaitDrawRsp()
 	if err != nil {
@@ -158,11 +163,11 @@ func (p *Player) draw() int {
 		log.Debug("WaitDrawRsp err:%v", err)
 		return 0
 	}
-
+	log.Debug("uid:%v, draw rsp:%v", p.uid, rsp)
 	dis_card := int(rsp.(*proto.DrawCardRsp).Card)
 	log.Debug("uid:%v, cards:%v, cards len:%v", p.uid, p.cards, len(p.cards))
 	if !p.ValidedDisCard(int(dis_card)) {
-		log.Error("uid:, invalid drop:%v", p.uid, dis_card)
+		log.Error("uid:%v, invalid drop:%v", p.uid, dis_card)
 		dis_card = card
 	}
 	p.drop(dis_card)
@@ -171,31 +176,26 @@ func (p *Player) draw() int {
 
 func (p *Player) HandlerDealRsp(msg interface{}) {
 	p.online = true
-	log.Debug("uid:%d HandlerDealRsp msg:%v", p.uid, msg)
 	deal_rsp_chan <- msg
 }
 
 func (p *Player) HandlerDrawRsp(msg interface{}) {
 	p.online = true
-	log.Debug("uid:%d HandlerDrawRsp msg:%v", p.uid, msg)
 	draw_rsp_chan <- msg
 }
 
 func (p *Player) HandlerHuRsp(msg interface{}) {
 	p.online = true
-	log.Debug("HandlerHuRsp msg:%v", msg)
 	hu_rsp_chan <- msg
 }
 
 func (p *Player) HandlerEatRsp(msg interface{}) {
 	p.online = true
-	log.Debug("HandlerEatRsp msg:%v", msg)
 	eat_rsp_chan <- msg
 }
 
 func (p *Player) HandlerPongRsp(msg interface{}) {
 	p.online = true
-	log.Debug("HandlerPongRsp msg:%v", msg)
 	pong_rsp_chan <- msg
 }
 
@@ -245,18 +245,22 @@ func (p *Player) WaitPongRsp() (interface{}, error) {
 }
 
 func (p *Player) Hu(card int) {
-
+	log.Debug("uid:%v hu card:%v", p.uid, card)
+	return
 }
 
 func (p *Player) Pong(card int, count int, discard int) {
 	var cards []int32
-	for i := 0; i < count-1; i++ {
+	for i := 0; i < count; i++ {
 		cards = append(cards, int32(card))
 	}
+
 	p.DelCards(cards)
 	cards = append(cards, int32(card))
 	p.AddPongCards(cards)
-	p.drop(discard)
+	if count == 2 {
+		p.drop(discard)
+	}
 }
 
 func (p *Player) Eat(eat *proto.Eat, discard int) {
@@ -271,10 +275,10 @@ func (p *Player) CheckHu(card int) bool {
 		hu = true
 	}
 	if _, ok := p.prewin_cards[card]; ok {
-		p.Hu(card)
 		hu = true
 	}
 	if hu {
+		log.Debug("uid:%v hu card:%v", p.uid, card)
 		p.WriteMsg(&proto.HuReq{
 			Card: uint32(card),
 		})
@@ -335,14 +339,15 @@ func (p *Player) CheckEat(card int) (int, bool) {
 		req.Eat = append(req.Eat, &eat)
 	}
 	if len(req.Eat) > 0 {
-		log.Debug("eat req:%v", req)
+		log.Debug("uid:%v eat req:%v", p.uid, req)
 		p.eat = req.Eat
 		p.WriteMsg(&req)
 		rsp, err := p.WaitEatRsp()
 		if err != nil {
-			log.Debug("WaitEatRsp err:%v", err)
+			log.Debug("uid:%v WaitEatRsp err:%v", p.uid, err)
 			return 0, false
 		}
+		log.Debug("uid:%v eat rsp:%v", p.uid, rsp)
 		eat := rsp.(*proto.EatRsp).Eat
 		dis_card := rsp.(*proto.EatRsp).DisCard
 		if !p.ValidedEat(eat) {
@@ -363,15 +368,18 @@ func (p *Player) CheckEat(card int) (int, bool) {
 func (p *Player) CheckPong(card int) (int, int) {
 	count := p.count(card)
 	if count >= 2 {
-		p.WriteMsg(&proto.PongReq{
+		req := &proto.PongReq{
 			Card:  int32(card),
 			Count: int32(count),
-		})
+		}
+		log.Debug("uid:%v pong req:%v", p.uid, req)
+		p.WriteMsg(req)
 		rsp, err := p.WaitPongRsp()
 		if err != nil {
 			log.Debug("WaitPongRsp err:%v", err)
 			return 0, 0
 		}
+		log.Debug("uid:%v pong rsp:%v", p.uid, rsp)
 		rsp_count := rsp.(*proto.PongRsp).Count
 		dis_card := rsp.(*proto.PongRsp).DisCard
 		if rsp_count == 0 {
@@ -384,11 +392,7 @@ func (p *Player) CheckPong(card int) (int, int) {
 			p.Pong(card, 2, int(dis_card))
 			return int(dis_card), 2
 		} else if rsp_count == 3 && count == 3 {
-			if !p.ValidedDisCard(int(dis_card)) {
-				log.Error("uid:, invalid drop:", p.uid, dis_card)
-				return 0, 0
-			}
-			p.Pong(card, 3, int(dis_card))
+			p.Pong(card, 3, 0)
 			return p.draw(), 3
 		}
 	}

@@ -187,15 +187,17 @@ func (t *Table) DropRecord(p *Player, dis_card int) {
 
 func (t *Table) DisCard(p *Player, dis_card int) {
 	t.DropRecord(p, dis_card)
-	for index := range t.players {
-		player := t.players[(t.play_turn+index)%len(t.players)]
+	for i := 0; i < len(t.players); i++ {
+		player := t.players[(t.play_turn+i)%len(t.players)]
 		if player.CheckHu(dis_card) {
+			player.Hu(dis_card)
+			t.win_player = player
 			return
 		}
 	}
 
-	for index := range t.players {
-		player := t.players[(t.play_turn+index)%len(t.players)]
+	for i := 0; i < len(t.players); i++ {
+		player := t.players[(t.play_turn+i)%len(t.players)]
 		if dis_card, count := player.CheckPong(dis_card); count > 0 {
 			pos, err := t.GetPlayerIndex(player.uid)
 			if err != nil {
@@ -210,6 +212,7 @@ func (t *Table) DisCard(p *Player, dis_card int) {
 
 	player := t.players[t.play_turn]
 	if dis_card, ok := player.CheckEat(dis_card); ok {
+		t.play_turn = (t.play_turn + 1) % len(t.players)
 		t.DisCard(player, dis_card)
 		return
 	}
@@ -467,14 +470,21 @@ func (t *Table) SearchRange(cards []int) (int, int) {
 	}
 	if begin-2 < 100*m+1 {
 		begin = 100*m + 1
+	} else {
+		begin = begin - 2
 	}
+
 	if m == 4 {
 		if end+2 > 100*m+7 {
 			end = 100*m + 7
+		} else {
+			end = end + 2
 		}
 	} else {
 		if end+2 > 100*m+9 {
 			end = 100*m + 9
+		} else {
+			end = end + 2
 		}
 	}
 
@@ -541,19 +551,17 @@ func (t *Table) Contain(elems []int, elem int) bool {
 	return false
 }
 
-func (t *Table) GetTingCards(cards []int) map[int]interface{} {
+func (t *Table) GetTingCards(p *Player) map[int]interface{} {
 	result := make(map[int]interface{})
-	separate_results := t.SeparateCards(cards)
+	separate_results := p.separate_result
 	var need_hun_arr []int          // 每个分类需要混的数组
 	var need_hun_with_eye_arr []int // 每个将分类需要混的数组
 	cur_hun_num := len(separate_results[0])
 
 	for _, cards := range separate_results[1:] {
-		//log.Debug("cards:%v", cards)
 		need_hun_arr = append(need_hun_arr, t.GetNeedHunInSub(cards, 0, 4))
 		need_hun_with_eye_arr = append(need_hun_with_eye_arr, t.GetNeedHunInSubWithEye(cards, 4))
 	}
-	//log.Debug("need_hun_arr:%v, need_hun_with_eye_arr:%v", need_hun_arr, need_hun_with_eye_arr)
 	need_num, index := t.GetBestComb(separate_results, need_hun_arr, need_hun_with_eye_arr)
 	if cur_hun_num-need_num >= 2 {
 		result[0] = 0
@@ -566,10 +574,12 @@ func (t *Table) GetTingCards(cards []int) map[int]interface{} {
 	if need_num > cur_hun_num+1 {
 		return result
 	}
+	log.Debug("uid:%v separate_results:%v", p.uid, separate_results)
+	log.Debug("uid:%v need_hun_arr:%v, need_hun_with_eye_arr:%v index:%v", p.uid, need_hun_arr, need_hun_with_eye_arr, index)
 	var cache_index []int
 	for _, i := range index {
 		begin, end := t.SearchRange(separate_results[i+1])
-		for card := begin; card < end; card++ {
+		for card := begin; card < end+1; card++ {
 			if ok := result[card]; ok != nil {
 				continue
 			}
@@ -583,12 +593,12 @@ func (t *Table) GetTingCards(cards []int) map[int]interface{} {
 		for j := 0; j < 4; j++ {
 			if j != i && len(separate_results[j+1]) != 0 && !t.Contain(cache_index, j) {
 				cache_index = append(cache_index, j)
-				begin, end := t.SearchRange(separate_results[i])
-				for card := begin; card < end; card++ {
+				begin, end := t.SearchRange(separate_results[j+1])
+				for card := begin; card < end+1; card++ {
 					if ok := result[card]; ok != nil {
 						continue
 					}
-					tmp_cards := t.Copy(separate_results[i+1])
+					tmp_cards := t.Copy(separate_results[j+1])
 					tmp_cards = append(tmp_cards, card)
 					sort.Ints(tmp_cards)
 					if t.GetNeedHunInSub(tmp_cards, 0, 4) <= need_hun_arr[j]-1 {
@@ -613,8 +623,10 @@ func (t *Table) Play() {
 		if discard != 0 {
 			t.DisCard(player, discard)
 			t.round += 1
+		} else {
+			t.win_player = player
 		}
-		time.Sleep(1 * time.Millisecond)
+		//time.Sleep(1 * time.Millisecond)
 	}
 }
 
@@ -628,8 +640,9 @@ func (t *Table) Run() {
 		} else {
 			t.Clear()
 			t.Play()
+			log.Debug("Table tid:%v running, play_count:%v, players num:%v, left_cards num:%d", t.tid, t.play_count, len(t.players), len(t.left_cards))
+			time.Sleep(10 * time.Millisecond)
 		}
-		log.Debug("Table tid:%v running, play_count:%v, players num:%v, left_cards num:%d", t.tid, t.play_count, len(t.players), len(t.left_cards))
-		time.Sleep(time.Second)
+		time.Sleep(50 * time.Millisecond)
 	}
 }

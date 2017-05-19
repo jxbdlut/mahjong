@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	lconf "github.com/name5566/leaf/conf"
-	"github.com/name5566/leaf/gate"
 	"github.com/name5566/leaf/log"
 	"github.com/name5566/leaf/network"
 	"math"
@@ -16,9 +15,9 @@ import (
 	"reflect"
 	"server/conf"
 	"server/proto"
+	"sort"
 	"strconv"
 	"time"
-	"sort"
 )
 
 type agent struct {
@@ -101,45 +100,63 @@ func HandlerBroadCastMsg(args []interface{}) {
 	log.Debug("broadcast:%v", msg)
 }
 
+func HandlerHuMsg(args []interface{}) {
+	msg := args[0].(*proto.HuReq)
+	a := args[1].(*agent)
+
+	hu_flag := a.Hu(int(msg.Card))
+	a.WriteMsg(&proto.HuRsp{
+		Ok: hu_flag,
+	})
+}
+
 func HandlerDealCardMsg(args []interface{}) {
 	msg := args[0].(*proto.DealCardReq)
-	a := args[1].(gate.Agent)
+	a := args[1].(*agent)
 
-	a.(*agent).Deal(msg.Cards, int(msg.FanCard), int(msg.HunCard))
+	a.Deal(msg.Cards, int(msg.FanCard), int(msg.HunCard))
 	a.WriteMsg(&proto.DealCardRsp{
 		ErrCode: 0,
 		ErrMsg:  "",
 	})
-	log.Debug("HandlerDealCardMsg:%v", msg)
 }
 
 func HandlerDrawCardMsg(args []interface{}) {
-	msg := args[0]
-	a := args[1].(gate.Agent)
-	discard := a.(*agent).Draw(int(msg.(*proto.DrawCardReq).Card))
-	a.WriteMsg(&proto.DrawCardRsp{
+	msg := args[0].(*proto.DrawCardReq)
+	a := args[1].(*agent)
+	log.Debug("HandlerDrawCardMsg uid:%v, req:%v", a.uid, msg)
+	discard := a.Draw(int(msg.Card))
+	rsp := &proto.DrawCardRsp{
 		Card: uint32(discard),
-	})
-	log.Debug("HandlerDrawCardMsg:%v", msg)
+	}
+	a.WriteMsg(rsp)
+	log.Debug("HandlerDrawCardMsg uid:%v, rsp:%v", a.uid, rsp)
 }
 
 func HandlerEatMsg(args []interface{}) {
-	msg := args[0]
-	a := args[1].(gate.Agent)
-	a.WriteMsg(&proto.EatRsp{
-		Eat:     msg.(*proto.EatReq).GetEat()[0],
-		DisCard: 0,
-	})
-	log.Debug("HandlerEatMsg:%v", msg)
+	msg := args[0].(*proto.EatReq)
+	a := args[1].(*agent)
+	log.Debug("HandlerEatMsg uid:%v, req:%v", a.uid, msg)
+	eat, discard := a.Eat(msg.Eat)
+	rsp := &proto.EatRsp{
+		Eat:     eat,
+		DisCard: int32(discard),
+	}
+	log.Debug("HandlerEatMsg uid:%v, rsp:%v", a.uid, rsp)
+	a.WriteMsg(rsp)
 }
 
 func HandlerPongMsg(args []interface{}) {
-	msg := args[0]
-	a := args[1].(gate.Agent)
-	a.WriteMsg(&proto.PongRsp{
-		Count:   msg.(*proto.PongReq).Count,
-		DisCard: 0,
-	})
+	msg := args[0].(*proto.PongReq)
+	a := args[1].(*agent)
+	log.Debug("HandlerPongMsg uid:%v, req:%v", a.uid, msg)
+	count, discard := a.Pong(int(msg.Card), int(msg.Count))
+	rsp := &proto.PongRsp{
+		Count:   int32(count),
+		DisCard: int32(discard),
+	}
+	log.Debug("HandlerPongMsg uid:%v, rsp:%v", a.uid, rsp)
+	a.WriteMsg(rsp)
 }
 
 func (a *agent) Run() {
@@ -173,7 +190,7 @@ func (a *agent) Run() {
 			log.Debug("route message error: %v", err)
 			break
 		}
-		log.Debug("msg type:%v, value:%v", reflect.TypeOf(msg), msg)
+		//log.Debug("msg type:%v, value:%v", reflect.TypeOf(msg), msg)
 	}
 }
 
@@ -194,7 +211,12 @@ func (a *agent) SeparateCards(cards []int) [5][]int {
 	return result
 }
 
+func (a *agent) Hu(card int) bool {
+	return true
+}
+
 func (a *agent) Deal(cards []int32, fan_card int, hun_card int) {
+	a.cards = append(a.cards[:0])
 	for _, card := range cards {
 		a.cards = append(a.cards, int(card))
 	}
@@ -203,8 +225,7 @@ func (a *agent) Deal(cards []int32, fan_card int, hun_card int) {
 	a.separate_result = a.SeparateCards(a.cards)
 }
 
-
-func Count(cards []int,  card int) int {
+func Count(cards []int, card int) int {
 	count := 0
 	for _, c := range cards {
 		if int(c) == card {
@@ -214,8 +235,7 @@ func Count(cards []int,  card int) int {
 	return count
 }
 
-
-func Index(cards []int,  card int) int {
+func Index(cards []int, card int) int {
 	for i, c := range cards {
 		if int(c) == card {
 			return i
@@ -236,18 +256,18 @@ func (a *agent) DropSingle() int {
 		}
 	}
 
-	for i:= 1; i < 4; i++ {
-		min_card, max_card := i * 100 + 1, i*100+9
-		if Count(a.separate_result[i], min_card) > 0 && Count(a.separate_result[i], min_card+1) == 0 && Count(a.separate_result[i], min_card+2) == 0 {
+	for i := 1; i < 4; i++ {
+		min_card, max_card := i*100+1, i*100+9
+		if Count(a.separate_result[i], min_card) == 1 && Count(a.separate_result[i], min_card+1) == 0 && Count(a.separate_result[i], min_card+2) == 0 {
 			return min_card
 		}
-		if Count(a.separate_result[i], max_card) > 0 && Count(a.separate_result[i], max_card-1) == 0 && Count(a.separate_result[i], max_card-2) == 0 {
+		if Count(a.separate_result[i], max_card) == 1 && Count(a.separate_result[i], max_card-1) == 0 && Count(a.separate_result[i], max_card-2) == 0 {
 			return max_card
 		}
 		for _, card := range a.separate_result[i] {
 			if Count(a.separate_result[i], card) > 1 {
 				continue
-			} else if Count(a.separate_result[i], card + 1) > 0 || Count(a.separate_result[i], card - 1) > 0{
+			} else if Count(a.separate_result[i], card+1) > 0 || Count(a.separate_result[i], card-1) > 0 {
 				continue
 			} else {
 				return card
@@ -258,18 +278,69 @@ func (a *agent) DropSingle() int {
 	return 0
 }
 
+func (a *agent) DropRand() int {
+	index := a.rand.Intn(len(a.cards))
+	return a.cards[index]
+}
+
+func (a *agent) DelCard(card1 int, card2 int, card3 int) []int {
+	index := Index(a.cards, card1)
+	if index != -1 {
+		a.cards = append(a.cards[:index], a.cards[index+1:]...)
+	}
+	index = Index(a.cards, card2)
+	if index != -1 {
+		a.cards = append(a.cards[:index], a.cards[index+1:]...)
+	}
+	index = Index(a.cards, card3)
+	if index != -1 {
+		a.cards = append(a.cards[:index], a.cards[index+1:]...)
+	}
+	a.separate_result = a.SeparateCards(a.cards)
+	return a.cards
+}
+
 func (a *agent) Draw(card int) int {
 	a.cards = append(a.cards, card)
 	a.separate_result = a.SeparateCards(a.cards)
 	discard := a.DropSingle()
 	if discard == 0 {
-		index := a.rand.Intn(len(a.cards))
-		discard = a.cards[index]
+		discard = a.DropRand()
 	}
-	index := Index(a.cards, discard)
-	a.cards = append(a.cards[:index], a.cards[index+1:]...)
-	log.Debug("draw card:%v discard:%v, index:%v", card, discard, index)
+	a.cards = a.DelCard(discard, 0, 0)
+	log.Debug("uid:%v, cards:%v len(cards):%v", a.uid, a.cards, len(a.cards))
+	log.Debug("uid:%v, draw card:%v discard:%v", a.uid, card, discard)
 	return discard
+}
+
+func (a *agent) Eat(eats []*proto.Eat) (*proto.Eat, int) {
+	eat := eats[0]
+	a.cards = a.DelCard(int(eat.HandCard[0]), int(eat.HandCard[1]), 0)
+	discard := a.DropSingle()
+	if discard == 0 {
+		discard = a.DropRand()
+	}
+	a.cards = a.DelCard(discard, 0, 0)
+	return eat, discard
+}
+
+func (a *agent) Pong(card int, count int) (int, int) {
+	log.Debug("uid:%v pong cards:%v", a.uid, a.cards)
+	if count == 2 {
+		a.cards = a.DelCard(card, card, 0)
+	} else if count == 3 {
+		a.cards = a.DelCard(card, card, card)
+	}
+	log.Debug("uid:%v pong cards:%v", a.uid, a.cards)
+	if count == 3 {
+		return count, 0
+	}
+	discard := a.DropSingle()
+	if discard == 0 {
+		discard = a.DropRand()
+	}
+	a.cards = a.DelCard(discard, 0, 0)
+	return count, discard
 }
 
 func (a *agent) OnClose() {
@@ -367,6 +438,7 @@ func main() {
 		client.NewAgent = func(conn *network.TCPConn) network.Agent {
 			proto.Processor.SetHandler(&proto.UserJoinTableMsg{}, HandlerBroadCastMsg)
 			proto.Processor.SetHandler(&proto.DealCardReq{}, HandlerDealCardMsg)
+			proto.Processor.SetHandler(&proto.HuReq{}, HandlerHuMsg)
 			proto.Processor.SetHandler(&proto.DrawCardReq{}, HandlerDrawCardMsg)
 			proto.Processor.SetHandler(&proto.EatReq{}, HandlerEatMsg)
 			proto.Processor.SetHandler(&proto.PongReq{}, HandlerPongMsg)
