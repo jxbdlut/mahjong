@@ -17,6 +17,7 @@ var (
 func init() {
 	handler(&proto.CreateTableReq{}, handlerCreateTable)
 	handler(&proto.JoinTableReq{}, handlerJoinTable)
+	handler(&proto.DealCardRsp{}, handlerPlayerRsp)
 	handler(&proto.DrawCardRsp{}, handlerPlayerRsp)
 	handler(&proto.HuRsp{}, handlerPlayerRsp)
 	handler(&proto.EatRsp{}, handlerPlayerRsp)
@@ -97,6 +98,8 @@ func handlerPlayerRsp(args []interface{}) {
 			player.HandlerEatRsp(rsp)
 		case reflect.TypeOf(&proto.PongRsp{}):
 			player.HandlerPongRsp(rsp)
+		case reflect.TypeOf(&proto.DealCardRsp{}):
+			player.HandlerDealRsp(rsp)
 		}
 	}
 }

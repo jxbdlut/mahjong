@@ -25,6 +25,7 @@ type Player struct {
 }
 
 var (
+	deal_rsp_chan = make(chan interface{})
 	draw_rsp_chan = make(chan interface{})
 	hu_rsp_chan   = make(chan interface{})
 	eat_rsp_chan  = make(chan interface{})
@@ -111,6 +112,30 @@ func (p *Player) drop(card int) {
 	log.Debug("uid:%v, prewin_cards:%v, call_time:%v", p.uid, p.prewin_cards, p.table.call_time)
 }
 
+func (p *Player) Deal() {
+	var req proto.DealCardReq
+	req.Uid = p.uid
+	for _, card := range p.cards {
+		req.Cards = append(req.Cards, int32(card))
+	}
+	req.FanCard = int32(p.table.fan_card)
+	req.HunCard = int32(p.table.hun_card)
+	p.WriteMsg(&req)
+	rsp, err := p.WaitDealRsp()
+	if err != nil {
+		p.SetOnline(false)
+		log.Debug("WaitDrawRsp err:%v", err)
+		return
+	}
+	if rsp.(*proto.DealCardRsp).ErrCode == 0 {
+		return
+	} else {
+		log.Debug("WaitDrawRsp err, rsp:%v", rsp)
+		return
+	}
+	return
+}
+
 func (p *Player) draw() int {
 	card := p.table.DrawCard()
 	log.Debug("uid:%v draw card:%v", p.uid, card)
@@ -134,14 +159,20 @@ func (p *Player) draw() int {
 		return 0
 	}
 
-	dis_card := rsp.(*proto.DrawCardRsp).Card
+	dis_card := int(rsp.(*proto.DrawCardRsp).Card)
 	log.Debug("uid:%v, cards:%v, cards len:%v", p.uid, p.cards, len(p.cards))
 	if !p.ValidedDisCard(int(dis_card)) {
-		log.Error("uid:%v, invalid drop:%v", p.uid, dis_card)
-		return card
+		log.Error("uid:, invalid drop:%v", p.uid, dis_card)
+		dis_card = card
 	}
-	p.drop(int(dis_card))
-	return int(dis_card)
+	p.drop(dis_card)
+	return dis_card
+}
+
+func (p *Player) HandlerDealRsp(msg interface{}) {
+	p.online = true
+	log.Debug("uid:%d HandlerDealRsp msg:%v", p.uid, msg)
+	deal_rsp_chan <- msg
 }
 
 func (p *Player) HandlerDrawRsp(msg interface{}) {
@@ -166,6 +197,15 @@ func (p *Player) HandlerPongRsp(msg interface{}) {
 	p.online = true
 	log.Debug("HandlerPongRsp msg:%v", msg)
 	pong_rsp_chan <- msg
+}
+
+func (p *Player) WaitDealRsp() (interface{}, error) {
+	select {
+	case msg := <-deal_rsp_chan:
+		return msg, nil
+	case <-time.After(10 * time.Second):
+		return nil, errors.New("time out")
+	}
 }
 
 func (p *Player) WaitDrawRsp() (interface{}, error) {
@@ -306,7 +346,7 @@ func (p *Player) CheckEat(card int) (int, bool) {
 		eat := rsp.(*proto.EatRsp).Eat
 		dis_card := rsp.(*proto.EatRsp).DisCard
 		if !p.ValidedEat(eat) {
-			log.Error("uid:%v, invalid eat:%v", p.uid, eat)
+			log.Error("uid:%v, invalid eat:$v", p.uid, eat)
 			return 0, false
 		}
 		if !p.ValidedDisCard(int(dis_card)) {
@@ -345,7 +385,7 @@ func (p *Player) CheckPong(card int) (int, int) {
 			return int(dis_card), 2
 		} else if rsp_count == 3 && count == 3 {
 			if !p.ValidedDisCard(int(dis_card)) {
-				log.Error("uid:%v, invalid drop:%v", p.uid, dis_card)
+				log.Error("uid:, invalid drop:", p.uid, dis_card)
 				return 0, 0
 			}
 			p.Pong(card, 3, int(dis_card))

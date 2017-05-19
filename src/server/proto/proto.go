@@ -14,6 +14,8 @@ func init() {
 	Processor.Register(&JoinTableReq{})
 	Processor.Register(&JoinTableRsp{})
 	Processor.Register(&UserJoinTableMsg{})
+	Processor.Register(&DealCardReq{})
+	Processor.Register(&DealCardRsp{})
 	Processor.Register(&DrawCardReq{})
 	Processor.Register(&DrawCardRsp{})
 	Processor.Register(&HuReq{})

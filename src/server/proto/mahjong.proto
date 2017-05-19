@@ -39,6 +39,20 @@ message JoinTableRsp
     string err_msg = 2;
 }
 
+message DealCardReq
+{
+    uint64 uid = 1;
+    repeated int32 cards = 2;
+    int32 fan_card = 3;
+    int32 hun_card = 4;
+}
+
+message DealCardRsp
+{
+    int32 err_code = 1;
+    string err_msg = 2;
+}
+
 message DrawCardReq
 {
     uint32 card = 1;
