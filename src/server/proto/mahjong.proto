@@ -39,7 +39,38 @@ message JoinTableRsp
     string err_msg = 2;
 }
 
-message DealCardReq
+enum OperatType{
+   Unkonw = 0x00;
+   DealOperat = 0x01;
+   DrawOperat = 0x02;
+   HuOperat = 0x04;
+   EatOperat = 0x08;
+   PongOperat = 0x10;
+}
+
+message OperatReq
+{
+    OperatType type = 1;
+    DealReq dealReq = 2;
+    DrawReq drawReq = 3;
+    HuReq huReq = 4;
+    EatReq eatReq = 5;
+    PongReq pongReq = 6;
+}
+
+message OperatRsp
+{
+    int32 err_code = 1;
+    string err_msg = 2;
+    OperatType type = 3;
+    DealRsp dealRsp = 4;
+    DrawRsp drawRsp = 5;
+    HuRsp huRsp = 6;
+    EatRsp eatRsp = 7;
+    PongRsp pongRsp = 8;
+}
+
+message DealReq
 {
     uint64 uid = 1;
     repeated int32 cards = 2;
@@ -47,25 +78,24 @@ message DealCardReq
     int32 hun_card = 4;
 }
 
-message DealCardRsp
+message DealRsp
 {
-    int32 err_code = 1;
-    string err_msg = 2;
+
 }
 
-message DrawCardReq
+message DrawReq
 {
-    uint32 card = 1;
+    int32 card = 1;
 }
 
-message DrawCardRsp
+message DrawRsp
 {
-    uint32 card = 1;
+    int32 card = 1;
 }
 
 message HuReq
 {
-    uint32 card = 1;
+    int32 card = 1;
 }
 
 message HuRsp
@@ -92,14 +122,22 @@ message EatRsp
 
 message PongReq
 {
+    enum GangType {
+        MingGang = 0;
+        BuGang = 1;
+        AnGang = 2;
+    }
     int32 card = 1;
     int32 count = 2;
+    GangType type = 3;
+
 }
 
 message PongRsp
 {
     int32 count = 1;
-    int32 dis_card = 2;
+    int32 card = 2;
+    int32 dis_card = 3;
 }
 
 message UserJoinTableMsg
@@ -108,4 +146,8 @@ message UserJoinTableMsg
     uint64 uid = 2;
     string name = 3;
     int32 pos = 4;
+}
+
+service MahjongService {
+    rpc Operat(OperatReq) returns (OperatRsp);
 }

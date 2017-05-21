@@ -10,6 +10,7 @@ import (
 	"github.com/name5566/leaf/gate"
 	"github.com/name5566/leaf/log"
 	"server/proto"
+	"server/game"
 	"server/userdata"
 )
 
@@ -35,6 +36,10 @@ func handleLogin(args []interface{}) {
 		a.SetUserData(&userdata.UserData{
 			Uid:  req.Uid,
 		})
+		player, ok := game.MapUidPlayer[req.Uid]
+		if ok {
+			player.SetAgent(a)
+		}
 		a.WriteMsg(&proto.LoginRsp{
 			ErrCode: 0,
 			ErrMsg:  "successed",

@@ -10,19 +10,17 @@ import (
 )
 
 var (
-	tables     map[uint32]*Table
-	curTableId uint32 = 10000
+	tables       map[uint32]*Table
+	curTableId   uint32 = 10000
+	MapUidPlayer map[uint64]*Player
 )
 
 func init() {
 	handler(&proto.CreateTableReq{}, handlerCreateTable)
 	handler(&proto.JoinTableReq{}, handlerJoinTable)
-	handler(&proto.DealCardRsp{}, handlerPlayerRsp)
-	handler(&proto.DrawCardRsp{}, handlerPlayerRsp)
-	handler(&proto.HuRsp{}, handlerPlayerRsp)
-	handler(&proto.EatRsp{}, handlerPlayerRsp)
-	handler(&proto.PongRsp{}, handlerPlayerRsp)
+	handler(&proto.OperatRsp{}, handlerOperatRsp)
 	tables = make(map[uint32]*Table)
+	MapUidPlayer = make(map[uint64]*Player)
 }
 
 func handler(m interface{}, h interface{}) {
@@ -82,25 +80,14 @@ func handlerJoinTable(args []interface{}) {
 	a.WriteMsg(&rsp)
 }
 
-func handlerPlayerRsp(args []interface{}) {
+func handlerOperatRsp(args []interface{}) {
 	rsp := args[0]
 	a := args[1].(gate.Agent)
 	tid := a.UserData().(*userdata.UserData).Tid
 	uid := a.UserData().(*userdata.UserData).Uid
 	table := tables[tid]
 	if player, err := table.GetPlayer(uid); err == nil {
-		switch reflect.TypeOf(rsp) {
-		case reflect.TypeOf(&proto.HuRsp{}):
-			player.HandlerHuRsp(rsp)
-		case reflect.TypeOf(&proto.DrawCardRsp{}):
-			player.HandlerDrawRsp(rsp)
-		case reflect.TypeOf(&proto.EatRsp{}):
-			player.HandlerEatRsp(rsp)
-		case reflect.TypeOf(&proto.PongRsp{}):
-			player.HandlerPongRsp(rsp)
-		case reflect.TypeOf(&proto.DealCardRsp{}):
-			player.HandlerDealRsp(rsp)
-		}
+		player.HandlerOperatRsp(rsp)
 	}
 }
 

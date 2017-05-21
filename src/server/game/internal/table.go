@@ -6,8 +6,8 @@ import (
 	"github.com/name5566/leaf/log"
 	"math/rand"
 	"server/userdata"
-	"sort"
 	"time"
+	"server/mahjong"
 )
 
 type Table struct {
@@ -15,13 +15,13 @@ type Table struct {
 	players     []*Player
 	play_count  uint32
 	play_turn   int
-	left_cards  []int
-	drop_cards  []int
+	left_cards  []int32
+	drop_cards  []int32
 	win_player  *Player
-	fan_card    int
-	hun_card    int
+	fan_card    int32
+	hun_card    int32
 	round       int
-	drop_record map[*Player][]int
+	drop_record map[*Player][]int32
 	call_time   int
 }
 
@@ -29,7 +29,7 @@ func NewTable(tid uint32) *Table {
 	t := new(Table)
 	t.tid = tid
 	t.play_turn = 0
-	t.drop_record = make(map[*Player][]int)
+	t.drop_record = make(map[*Player][]int32)
 	return t
 }
 
@@ -45,7 +45,7 @@ func (t *Table) Clear() {
 	}
 }
 
-func GetIndex(cards []int, card int) (int, error) {
+func GetIndex(cards []int32, card int32) (int, error) {
 	for i, c := range cards {
 		if c == card {
 			return i, nil
@@ -74,10 +74,12 @@ func (t *Table) GetPlayer(uid uint64) (*Player, error) {
 
 func (t *Table) AddAgent(agent gate.Agent, master bool) error {
 	if len(t.players) < 4 {
-		player := NewPlayer(agent, agent.UserData().(*userdata.UserData).Uid)
+		uid := agent.UserData().(*userdata.UserData).Uid
+		player := NewPlayer(agent, uid)
 		player.SetMaster(master)
 		player.SetTable(t)
 		player.SetOnline(true)
+		MapUidPlayer[uid] = player
 		t.players = append(t.players, player)
 		return nil
 	} else {
@@ -85,10 +87,21 @@ func (t *Table) AddAgent(agent gate.Agent, master bool) error {
 	}
 }
 
-func (t *Table) RemoveAgent(agent gate.Agent) error {
+func (t *Table) RemoveAgent(player *Player) error {
+	uid := player.uid
+	if index, err := t.GetPlayerIndex(uid); err == nil {
+		player.agent.Destroy()
+		t.players = append(t.players[:index], t.players[index+1:]...)
+		delete(MapUidPlayer, uid)
+		return nil
+	}
+	return errors.New("agent not in table")
+}
+
+func (t *Table) OfflineAgent(agent gate.Agent) error {
 	uid := agent.UserData().(*userdata.UserData).Uid
 	if index, err := t.GetPlayerIndex(uid); err == nil {
-		t.players = append(t.players[:index], t.players[index+1:]...)
+		t.players[index].online = false
 		return nil
 	}
 	return errors.New("agent not in table")
@@ -108,27 +121,10 @@ func (t *Table) BroadcastExceptMe(msg interface{}, uid uint64) {
 	}
 }
 
-func (t *Table) SeparateCards(cards []int) [5][]int {
-	var result = [5][]int{}
-	for _, card := range cards {
-		m := int(0)
-		if int(card) != t.hun_card {
-			m = card / 100
-		} else {
-			m = 0
-		}
-		result[m] = append(result[m], int(card))
-	}
-	for _, cards := range result {
-		sort.Ints(cards)
-	}
-	return result
-}
-
 func (t *Table) Shuffle() {
-	each_cards := []int{101, 102, 103, 104, 105, 106, 107, 108, 109, 201, 202, 203, 204, 205, 206, 207, 208, 209,
+	each_cards := []int32{101, 102, 103, 104, 105, 106, 107, 108, 109, 201, 202, 203, 204, 205, 206, 207, 208, 209,
 		301, 302, 303, 304, 305, 306, 307, 308, 309, 401, 402, 403, 404, 405, 406, 407}
-	var all_cards []int
+	var all_cards []int32
 	for i := 0; i < 4; i++ {
 		all_cards = append(all_cards, each_cards[:]...)
 	}
@@ -148,14 +144,17 @@ func (t *Table) Deal() {
 		player.Clear()
 		player.FeedCard(t.left_cards[:13])
 		t.left_cards = append(t.left_cards[:0], t.left_cards[13:]...)
-		player.Deal()
-		log.Debug("uid:%v cards:%v", player.uid, player.cards)
+		log.Debug("%v", player)
 	}
 	t.fan_card = t.DrawCard()
 	t.hun_card = t.NextCard(t.fan_card)
+
+	for _, player := range t.players {
+		player.Deal()
+	}
 }
 
-func (t *Table) NextCard(card int) int {
+func (t *Table) NextCard(card int32) int32 {
 	m := t.fan_card / 100
 	v := t.fan_card % 10
 	if 0 < m && m < 4 {
@@ -175,22 +174,27 @@ func (t *Table) NextCard(card int) int {
 	return 100*m + v
 }
 
-func (t *Table) DrawCard() int {
+func (t *Table) DrawCard() int32 {
 	card := t.left_cards[0]
 	t.left_cards = append(t.left_cards[:0], t.left_cards[1:]...)
 	return card
 }
 
-func (t *Table) DropRecord(p *Player, dis_card int) {
+func (t *Table) DropRecord(p *Player, dis_card int32) {
 	t.drop_record[p] = append(t.drop_record[p], dis_card)
 }
 
-func (t *Table) DisCard(p *Player, dis_card int) {
+func (t *Table) DisCard(p *Player, dis_card int32) {
 	t.DropRecord(p, dis_card)
+	next_pos, err := t.GetPlayerIndex(p.uid)
+	if err != nil {
+		log.Error("next_pos err:%v", err)
+		return
+	}
 	for i := 0; i < len(t.players); i++ {
-		player := t.players[(t.play_turn+i)%len(t.players)]
-		if player.CheckHu(dis_card) {
-			player.Hu(dis_card)
+		player := t.players[(next_pos+i)%len(t.players)]
+		if player.CheckHu(dis_card, false) {
+			player.Hu(dis_card, false)
 			t.win_player = player
 			return
 		}
@@ -241,7 +245,7 @@ func min(a int, b int) int {
 	}
 }
 
-func (t *Table) Check3Combine(card1 int, card2 int, card3 int) bool {
+func (t *Table) Check3Combine(card1 int32, card2 int32, card3 int32) bool {
 	m1, m2, m3 := card1/100, card2/100, card3/100
 
 	if m1 != m2 || m1 != m3 {
@@ -260,20 +264,14 @@ func (t *Table) Check3Combine(card1 int, card2 int, card3 int) bool {
 	return false
 }
 
-func (t *Table) Check2Combine(card1 int, card2 int) bool {
+func (t *Table) Check2Combine(card1 int32, card2 int32) bool {
 	if card1 == card2 {
 		return true
 	}
 	return false
 }
 
-func (t *Table) Copy(cards []int) []int {
-	cards_copy := make([]int, len(cards))
-	copy(cards_copy, cards)
-	return cards_copy
-}
-
-func (t *Table) Remove(cards []int, card1 int, card2 int, card3 int) []int {
+func (t *Table) Remove(cards []int32, card1 int32, card2 int32, card3 int32) []int32 {
 	if card1 != 0 {
 		if i, err := GetIndex(cards, card1); err == nil {
 			cards = append(cards[:i], cards[i+1:]...)
@@ -292,7 +290,7 @@ func (t *Table) Remove(cards []int, card1 int, card2 int, card3 int) []int {
 	return cards
 }
 
-func (t *Table) GetNeedHunInSub(sub_cards []int, hun_num int, need_hun_count int) int {
+func (t *Table) GetNeedHunInSub(sub_cards []int32, hun_num int, need_hun_count int) int {
 	t.call_time++
 	if need_hun_count == 0 {
 		return need_hun_count
@@ -337,11 +335,8 @@ func (t *Table) GetNeedHunInSub(sub_cards []int, hun_num int, need_hun_count int
 			if i+1 < len_sub_cards {
 				tmp1, tmp2, tmp3 := sub_cards[0], sub_cards[i], sub_cards[i+1]
 				if t.Check3Combine(tmp1, tmp2, tmp3) {
-					// 拷贝
-					tmp_cards := t.Copy(sub_cards)
-					//log.Debug("tmp_cards:%v", tmp_cards)
+					tmp_cards := mahjong.Copy(sub_cards)
 					tmp_cards = t.Remove(tmp_cards, tmp1, tmp2, tmp3)
-					//log.Debug("tmp_cards:%v", tmp_cards)
 					need_hun_count = t.GetNeedHunInSub(tmp_cards, hun_num, need_hun_count)
 				}
 			}
@@ -352,7 +347,7 @@ func (t *Table) GetNeedHunInSub(sub_cards []int, hun_num int, need_hun_count int
 		if hun_num+t.GetModNeedNum(len_sub_cards-2, false)+1 < need_hun_count {
 			if m == 4 {
 				if v0 == v1 {
-					tmp_cards := t.Copy(sub_cards[2:])
+					tmp_cards := mahjong.Copy(sub_cards[2:])
 					need_hun_count = t.GetNeedHunInSub(tmp_cards, hun_num+1, need_hun_count)
 				}
 			} else {
@@ -371,8 +366,7 @@ func (t *Table) GetNeedHunInSub(sub_cards []int, hun_num int, need_hun_count int
 					mius := v1 - v0
 					if mius < 3 {
 						tmp1, tmp2 := sub_cards[0], sub_cards[i]
-						// 拷贝
-						tmp_cards := t.Copy(sub_cards)
+						tmp_cards := mahjong.Copy(sub_cards)
 						tmp_cards = t.Remove(tmp_cards, tmp1, tmp2, 0)
 						need_hun_count = t.GetNeedHunInSub(tmp_cards, hun_num+1, need_hun_count)
 						if mius >= 1 {
@@ -386,17 +380,16 @@ func (t *Table) GetNeedHunInSub(sub_cards []int, hun_num int, need_hun_count int
 		}
 		// 第一个自己一铺
 		if hun_num+t.GetModNeedNum(len_sub_cards-1, false)+2 < need_hun_count {
-			//拷贝
-			tmp_cards := t.Copy(sub_cards[1:])
+			tmp_cards := mahjong.Copy(sub_cards[1:])
 			need_hun_count = t.GetNeedHunInSub(tmp_cards, hun_num+2, need_hun_count)
 		}
 	}
 	return need_hun_count
 }
 
-func (t *Table) GetNeedHunInSubWithEye(cards []int, min_need_num int) int {
+func (t *Table) GetNeedHunInSubWithEye(cards []int32, min_need_num int) int {
 	// 拷贝
-	cards_copy := t.Copy(cards)
+	cards_copy := mahjong.Copy(cards)
 	len_cards := len(cards_copy)
 	if len_cards == 0 {
 		return 2
@@ -406,22 +399,19 @@ func (t *Table) GetNeedHunInSubWithEye(cards []int, min_need_num int) int {
 	}
 	for i := 0; i < len_cards; i++ {
 		if i == len_cards-1 { // 如果是最后一张牌
-			//拷贝
-			tmp_cards := t.Copy(cards_copy)
+			tmp_cards := mahjong.Copy(cards_copy)
 			tmp_cards = t.Remove(tmp_cards, cards_copy[i], 0, 0)
 			min_need_num = min(min_need_num, t.GetNeedHunInSub(tmp_cards, 0, 4)+1)
 		} else {
 			if i+2 == len_cards || cards_copy[i]%10 != cards_copy[i+2]%10 {
 				if t.Check2Combine(cards_copy[i], cards_copy[i+1]) {
-					// 拷贝
-					tmp_cards := t.Copy(cards_copy)
+					tmp_cards := mahjong.Copy(cards_copy)
 					tmp_cards = t.Remove(tmp_cards, cards_copy[i], cards_copy[i+1], 0)
 					min_need_num = min(min_need_num, t.GetNeedHunInSub(tmp_cards, 0, 4))
 				}
 			}
 			if cards_copy[i]%10 != cards_copy[i+1]%10 {
-				//拷贝
-				tmp_cards := t.Copy(cards_copy)
+				tmp_cards := mahjong.Copy(cards_copy)
 				tmp_cards = t.Remove(tmp_cards, cards_copy[i], 0, 0)
 				min_need_num = min(min_need_num, t.GetNeedHunInSub(tmp_cards, 0, 4)+1)
 			}
@@ -430,7 +420,7 @@ func (t *Table) GetNeedHunInSubWithEye(cards []int, min_need_num int) int {
 	return min_need_num
 }
 
-func (t *Table) GetBestComb(separate_results [5][]int, need_hun_arr []int, need_hun_with_eye_arr []int) (int, []int) {
+func (t *Table) GetBestComb(separate_results [5][]int32, need_hun_arr []int, need_hun_with_eye_arr []int) (int, []int) {
 	min_need_num := 5
 	sum_num := t.SumNeedHun(need_hun_arr)
 	var result []int
@@ -456,10 +446,10 @@ func (t *Table) SumNeedHun(need_hun_arr []int) int {
 	return sum
 }
 
-func (t *Table) SearchRange(cards []int) (int, int) {
+func (t *Table) SearchRange(cards []int32) (int32, int32) {
 	m := cards[0] / 100
-	begin := 10
-	end := 0
+	begin := int32(10)
+	end := int32(0)
 	for _, card := range cards {
 		if card < begin {
 			begin = card
@@ -491,9 +481,8 @@ func (t *Table) SearchRange(cards []int) (int, int) {
 	return begin, end
 }
 
-func (t *Table) CanHu(cards []int, hun_num int) bool {
-	// 拷贝
-	cards_copy := t.Copy(cards)
+func (t *Table) CanHu(cards []int32, hun_num int) bool {
+	cards_copy := mahjong.Copy(cards)
 	len_cards := len(cards_copy)
 	if len_cards == 0 {
 		if hun_num >= 2 {
@@ -506,13 +495,12 @@ func (t *Table) CanHu(cards []int, hun_num int) bool {
 	if hun_num < t.GetModNeedNum(len_cards, true) {
 		return false
 	}
-	sort.Ints(cards_copy)
+	mahjong.SortCards(cards_copy, t.hun_card)
 	for i := 0; i < len_cards; i++ {
 		// 如果是最后一张牌
 		if i+1 == len_cards {
 			if hun_num > 0 {
-				// 拷贝
-				tmp_cards := t.Copy(cards_copy)
+				tmp_cards := mahjong.Copy(cards_copy)
 				tmp_cards = t.Remove(tmp_cards, cards_copy[i], 0, 0)
 				if t.GetNeedHunInSub(tmp_cards, 0, 4) <= hun_num-1 {
 					return true
@@ -521,8 +509,7 @@ func (t *Table) CanHu(cards []int, hun_num int) bool {
 		} else {
 			if i+2 == len_cards || cards_copy[i]%10 != cards_copy[i+2]%10 {
 				if t.Check2Combine(cards_copy[i], cards_copy[i+1]) {
-					// 拷贝
-					tmp_cards := t.Copy(cards_copy)
+					tmp_cards := mahjong.Copy(cards_copy)
 					tmp_cards = t.Remove(tmp_cards, cards_copy[i], cards_copy[i+1], 0)
 					if t.GetNeedHunInSub(tmp_cards, 0, 4) <= hun_num {
 						return true
@@ -530,8 +517,7 @@ func (t *Table) CanHu(cards []int, hun_num int) bool {
 				}
 			}
 			if hun_num > 0 && cards_copy[i]%10 != cards_copy[i+1]%10 {
-				// 拷贝
-				tmp_cards := t.Copy(cards_copy)
+				tmp_cards := mahjong.Copy(cards_copy)
 				tmp_cards = t.Remove(tmp_cards, cards_copy[i], 0, 0)
 				if t.GetNeedHunInSub(tmp_cards, 0, 4) <= hun_num-1 {
 					return true
@@ -551,8 +537,8 @@ func (t *Table) Contain(elems []int, elem int) bool {
 	return false
 }
 
-func (t *Table) GetTingCards(p *Player) map[int]interface{} {
-	result := make(map[int]interface{})
+func (t *Table) GetTingCards(p *Player) map[int32]interface{} {
+	result := make(map[int32]interface{})
 	separate_results := p.separate_result
 	var need_hun_arr []int          // 每个分类需要混的数组
 	var need_hun_with_eye_arr []int // 每个将分类需要混的数组
@@ -564,18 +550,18 @@ func (t *Table) GetTingCards(p *Player) map[int]interface{} {
 	}
 	need_num, index := t.GetBestComb(separate_results, need_hun_arr, need_hun_with_eye_arr)
 	if cur_hun_num-need_num >= 2 {
-		result[0] = 0
+		result[1] = 1
 		return result
 	}
 	if cur_hun_num-t.SumNeedHun(need_hun_arr) > 0 {
-		result[1] = 1
+		result[2] = 2
 		return result
 	}
 	if need_num > cur_hun_num+1 {
 		return result
 	}
-	log.Debug("uid:%v separate_results:%v", p.uid, separate_results)
-	log.Debug("uid:%v need_hun_arr:%v, need_hun_with_eye_arr:%v index:%v", p.uid, need_hun_arr, need_hun_with_eye_arr, index)
+	//log.Debug("uid:%v separate_results:%v", p.uid, separate_results)
+	//log.Debug("uid:%v need_hun_arr:%v, need_hun_with_eye_arr:%v index:%v", p.uid, need_hun_arr, need_hun_with_eye_arr, index)
 	var cache_index []int
 	for _, i := range index {
 		begin, end := t.SearchRange(separate_results[i+1])
@@ -583,9 +569,9 @@ func (t *Table) GetTingCards(p *Player) map[int]interface{} {
 			if ok := result[card]; ok != nil {
 				continue
 			}
-			tmp_cards := t.Copy(separate_results[i+1])
+			tmp_cards := mahjong.Copy(separate_results[i+1])
 			tmp_cards = append(tmp_cards, card)
-			sort.Ints(tmp_cards)
+			mahjong.SortCards(tmp_cards, t.hun_card)
 			if t.CanHu(tmp_cards, need_hun_with_eye_arr[i]-1) {
 				result[card] = card
 			}
@@ -598,9 +584,9 @@ func (t *Table) GetTingCards(p *Player) map[int]interface{} {
 					if ok := result[card]; ok != nil {
 						continue
 					}
-					tmp_cards := t.Copy(separate_results[j+1])
+					tmp_cards := mahjong.Copy(separate_results[j+1])
 					tmp_cards = append(tmp_cards, card)
-					sort.Ints(tmp_cards)
+					mahjong.SortCards(tmp_cards, t.hun_card)
 					if t.GetNeedHunInSub(tmp_cards, 0, 4) <= need_hun_arr[j]-1 {
 						result[card] = card
 					}
@@ -612,37 +598,53 @@ func (t *Table) GetTingCards(p *Player) map[int]interface{} {
 	return result
 }
 
+func (t *Table)AllOnline() bool {
+	for _, player := range t.players {
+		if !player.online {
+			return false
+		}
+	}
+	return true
+}
+
 func (t *Table) Play() {
 	t.play_count++
 	t.Shuffle()
 	t.Deal()
-	for len(t.left_cards) > 10 && t.win_player == nil && len(t.players) > 0 {
+	for len(t.left_cards) > 10 && t.win_player == nil && len(t.players) == 4 && t.AllOnline() {
 		player := t.players[t.play_turn]
 		t.play_turn = (t.play_turn + 1) % len(t.players)
-		discard := player.draw()
+		discard := player.Draw(false)
 		if discard != 0 {
 			t.DisCard(player, discard)
 			t.round += 1
 		} else {
 			t.win_player = player
 		}
-		//time.Sleep(1 * time.Millisecond)
+	}
+	if t.win_player != nil {
+		log.Release("tid:%v, uid :%v win the game, round:%v", t.tid, t.win_player.uid, t.round)
+	} else {
+		log.Release("tid:%v, 流局..., play_count:%v", t.tid, t.play_count)
 	}
 }
 
 func (t *Table) Run() {
 	for {
 		if len(t.players) == 0 {
-			log.Debug("table:%v is over", t.tid)
 			break
 		} else if len(t.players) < 4 {
-			log.Debug("waiting agent join, table id:%v agent num:%v", t.tid, len(t.players))
+			log.Debug("tid:%v, waiting agent join, agent num:%v", t.tid, len(t.players))
 		} else {
 			t.Clear()
 			t.Play()
-			log.Debug("Table tid:%v running, play_count:%v, players num:%v, left_cards num:%d", t.tid, t.play_count, len(t.players), len(t.left_cards))
-			time.Sleep(10 * time.Millisecond)
+			log.Debug("tid:%v, running, play_count:%v, players num:%v, left_cards num:%d", t.tid, t.play_count, len(t.players), len(t.left_cards))
+			time.Sleep(1 * time.Second)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	for _, player := range t.players {
+		t.RemoveAgent(player)
+	}
+	log.Debug("tid:%v, is over", t.tid)
 }

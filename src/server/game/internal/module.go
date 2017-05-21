@@ -6,8 +6,8 @@ import (
 )
 
 var (
-	skeleton = base.NewSkeleton()
-	ChanRPC  = skeleton.ChanRPCServer
+	skeleton       = base.NewSkeleton()
+	ChanRPC        = skeleton.ChanRPCServer
 )
 
 type Module struct {

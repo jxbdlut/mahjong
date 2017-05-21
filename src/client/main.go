@@ -14,8 +14,8 @@ import (
 	"os/signal"
 	"reflect"
 	"server/conf"
+	"server/mahjong"
 	"server/proto"
-	"sort"
 	"strconv"
 	"time"
 )
@@ -25,19 +25,21 @@ type agent struct {
 	name            string
 	pos             int
 	others          []*agent
-	cards           []int
-	fan_card        int
-	hun_card        int
+	cards           []int32
+	fan_card        int32
+	hun_card        int32
 	conn            network.Conn
 	Processor       network.Processor
 	userData        interface{}
 	master          bool
 	rand            *rand.Rand
-	separate_result [5][]int
+	separate_result [5][]int32
+	turn            int
 }
 
 var (
 	tid_chan = make(chan uint32)
+	c        = make(chan os.Signal, 1)
 )
 
 func (a *agent) Login() error {
@@ -100,62 +102,31 @@ func HandlerBroadCastMsg(args []interface{}) {
 	log.Debug("broadcast:%v", msg)
 }
 
-func HandlerHuMsg(args []interface{}) {
-	msg := args[0].(*proto.HuReq)
+func HandlerOperatMsg(args []interface{}) {
+	req := args[0].(*proto.OperatReq)
+	rsp := proto.NewOperatRsp()
 	a := args[1].(*agent)
-
-	hu_flag := a.Hu(int(msg.Card))
-	a.WriteMsg(&proto.HuRsp{
-		Ok: hu_flag,
-	})
-}
-
-func HandlerDealCardMsg(args []interface{}) {
-	msg := args[0].(*proto.DealCardReq)
-	a := args[1].(*agent)
-
-	a.Deal(msg.Cards, int(msg.FanCard), int(msg.HunCard))
-	a.WriteMsg(&proto.DealCardRsp{
-		ErrCode: 0,
-		ErrMsg:  "",
-	})
-}
-
-func HandlerDrawCardMsg(args []interface{}) {
-	msg := args[0].(*proto.DrawCardReq)
-	a := args[1].(*agent)
-	log.Debug("HandlerDrawCardMsg uid:%v, req:%v", a.uid, msg)
-	discard := a.Draw(int(msg.Card))
-	rsp := &proto.DrawCardRsp{
-		Card: uint32(discard),
+	if req.Type&proto.OperatType_DealOperat != 0 {
+		a.turn++
+		rsp.Type = proto.OperatType_DealOperat
+		a.Deal(req.DealReq, rsp.DealRsp)
+	} else if req.Type&proto.OperatType_HuOperat != 0 {
+		rsp.Type = proto.OperatType_HuOperat
+		a.Hu(req.HuReq, rsp.HuRsp)
+	} else if req.Type&proto.OperatType_DrawOperat != 0 && req.Type&proto.OperatType_PongOperat != 0 {
+		a.AnGang(req, rsp)
+	} else if req.Type&proto.OperatType_DrawOperat != 0 {
+		rsp.Type = proto.OperatType_DrawOperat
+		a.Draw(req.DrawReq, rsp.DrawRsp)
+	} else if req.Type&proto.OperatType_PongOperat != 0 {
+		rsp.Type = proto.OperatType_PongOperat
+		a.Pong(req.PongReq, rsp.PongRsp)
+	} else if req.Type&proto.OperatType_EatOperat != 0 {
+		rsp.Type = proto.OperatType_EatOperat
+		a.Eat(req.EatReq, rsp.EatRsp)
 	}
-	a.WriteMsg(rsp)
-	log.Debug("HandlerDrawCardMsg uid:%v, rsp:%v", a.uid, rsp)
-}
-
-func HandlerEatMsg(args []interface{}) {
-	msg := args[0].(*proto.EatReq)
-	a := args[1].(*agent)
-	log.Debug("HandlerEatMsg uid:%v, req:%v", a.uid, msg)
-	eat, discard := a.Eat(msg.Eat)
-	rsp := &proto.EatRsp{
-		Eat:     eat,
-		DisCard: int32(discard),
-	}
-	log.Debug("HandlerEatMsg uid:%v, rsp:%v", a.uid, rsp)
-	a.WriteMsg(rsp)
-}
-
-func HandlerPongMsg(args []interface{}) {
-	msg := args[0].(*proto.PongReq)
-	a := args[1].(*agent)
-	log.Debug("HandlerPongMsg uid:%v, req:%v", a.uid, msg)
-	count, discard := a.Pong(int(msg.Card), int(msg.Count))
-	rsp := &proto.PongRsp{
-		Count:   int32(count),
-		DisCard: int32(discard),
-	}
-	log.Debug("HandlerPongMsg uid:%v, rsp:%v", a.uid, rsp)
+	log.Release("uid:%v, %v, %v", a.uid, req.Info(), rsp.Info())
+	log.Release("uid:%v, 手牌:%v", a.uid, mahjong.CardsStr(a.cards))
 	a.WriteMsg(rsp)
 }
 
@@ -179,6 +150,9 @@ func (a *agent) Run() {
 		}
 	}
 	for {
+		if a.turn > 100 {
+			break
+		}
 		msg, err := a.ReadMsg()
 		if err != nil {
 			log.Error("read message:", err)
@@ -190,84 +164,56 @@ func (a *agent) Run() {
 			log.Debug("route message error: %v", err)
 			break
 		}
-		//log.Debug("msg type:%v, value:%v", reflect.TypeOf(msg), msg)
+	}
+	if a.master {
+		c <- os.Signal(os.Interrupt)
 	}
 }
 
-func (a *agent) SeparateCards(cards []int) [5][]int {
-	var result = [5][]int{}
-	for _, card := range cards {
-		m := int(0)
-		if int(card) != a.hun_card {
-			m = card / 100
-		} else {
-			m = 0
-		}
-		result[m] = append(result[m], int(card))
-	}
-	for _, cards := range result {
-		sort.Ints(cards)
-	}
-	return result
-}
-
-func (a *agent) Hu(card int) bool {
+func (a *agent) Hu(req *proto.HuReq, rsp *proto.HuRsp) bool {
+	rsp.Ok = true
 	return true
 }
 
-func (a *agent) Deal(cards []int32, fan_card int, hun_card int) {
+func (a *agent) Deal(req *proto.DealReq, rsp *proto.DealRsp) bool {
+	cards := req.Cards
 	a.cards = append(a.cards[:0])
 	for _, card := range cards {
-		a.cards = append(a.cards, int(card))
+		a.cards = append(a.cards, card)
 	}
-	a.fan_card = fan_card
-	a.hun_card = hun_card
-	a.separate_result = a.SeparateCards(a.cards)
+	a.fan_card = req.FanCard
+	a.hun_card = req.HunCard
+	a.separate_result = mahjong.SeparateCards(a.cards, a.hun_card)
+	return true
 }
 
-func Count(cards []int, card int) int {
-	count := 0
-	for _, c := range cards {
-		if int(c) == card {
-			count++
-		}
-	}
-	return count
-}
-
-func Index(cards []int, card int) int {
-	for i, c := range cards {
-		if int(c) == card {
-			return i
-		}
-	}
-	return -1
-}
-
-func (a *agent) DropSingle() int {
+func (a *agent) DropSingle() int32 {
 	wind_cards := a.separate_result[4]
 	if len(wind_cards) == 1 {
 		return wind_cards[0]
 	} else {
 		for _, card := range wind_cards {
-			if Count(wind_cards, card) == 1 {
+			if mahjong.Count(wind_cards, card) == 1 {
 				return card
 			}
 		}
 	}
 
 	for i := 1; i < 4; i++ {
-		min_card, max_card := i*100+1, i*100+9
-		if Count(a.separate_result[i], min_card) == 1 && Count(a.separate_result[i], min_card+1) == 0 && Count(a.separate_result[i], min_card+2) == 0 {
+		min_card, max_card := int32(i*100+1), int32(i*100+9)
+		if mahjong.Count(a.separate_result[i], min_card) == 1 && mahjong.Count(a.separate_result[i], min_card+1) == 0 && mahjong.Count(a.separate_result[i], min_card+2) == 0 {
 			return min_card
 		}
-		if Count(a.separate_result[i], max_card) == 1 && Count(a.separate_result[i], max_card-1) == 0 && Count(a.separate_result[i], max_card-2) == 0 {
+		if mahjong.Count(a.separate_result[i], max_card) == 1 && mahjong.Count(a.separate_result[i], max_card-1) == 0 && mahjong.Count(a.separate_result[i], max_card-2) == 0 {
 			return max_card
 		}
+	}
+
+	for i := 1; i < 4; i++ {
 		for _, card := range a.separate_result[i] {
-			if Count(a.separate_result[i], card) > 1 {
+			if mahjong.Count(a.separate_result[i], card) > 1 {
 				continue
-			} else if Count(a.separate_result[i], card+1) > 0 || Count(a.separate_result[i], card-1) > 0 {
+			} else if mahjong.Count(a.separate_result[i], card+1) > 0 || mahjong.Count(a.separate_result[i], card-1) > 0 {
 				continue
 			} else {
 				return card
@@ -278,69 +224,92 @@ func (a *agent) DropSingle() int {
 	return 0
 }
 
-func (a *agent) DropRand() int {
-	index := a.rand.Intn(len(a.cards))
-	return a.cards[index]
+func (a *agent) DropRand() int32 {
+	for {
+		index := a.rand.Intn(len(a.cards))
+		if a.hun_card != a.cards[index] {
+			return a.cards[index]
+		}
+	}
 }
 
-func (a *agent) DelCard(card1 int, card2 int, card3 int) []int {
-	index := Index(a.cards, card1)
+func (a *agent) DelGang(card int32) {
+	for i := 0; i < 4; i++ {
+		index := mahjong.Index(a.cards, card)
+		if index != -1 {
+			a.cards = append(a.cards[:index], a.cards[index+1:]...)
+		}
+	}
+}
+
+func (a *agent) DelCard(card1 int32, card2 int32, card3 int32) []int32 {
+	index := mahjong.Index(a.cards, card1)
 	if index != -1 {
 		a.cards = append(a.cards[:index], a.cards[index+1:]...)
 	}
-	index = Index(a.cards, card2)
+	index = mahjong.Index(a.cards, card2)
 	if index != -1 {
 		a.cards = append(a.cards[:index], a.cards[index+1:]...)
 	}
-	index = Index(a.cards, card3)
+	index = mahjong.Index(a.cards, card3)
 	if index != -1 {
 		a.cards = append(a.cards[:index], a.cards[index+1:]...)
 	}
-	a.separate_result = a.SeparateCards(a.cards)
+	a.separate_result = mahjong.SeparateCards(a.cards, a.hun_card)
 	return a.cards
 }
 
-func (a *agent) Draw(card int) int {
-	a.cards = append(a.cards, card)
-	a.separate_result = a.SeparateCards(a.cards)
+func (a *agent) Draw(req *proto.DrawReq, rsp *proto.DrawRsp) {
+	a.cards = append(a.cards, req.Card)
+	a.separate_result = mahjong.SeparateCards(a.cards, a.hun_card)
 	discard := a.DropSingle()
 	if discard == 0 {
 		discard = a.DropRand()
 	}
 	a.cards = a.DelCard(discard, 0, 0)
-	log.Debug("uid:%v, cards:%v len(cards):%v", a.uid, a.cards, len(a.cards))
-	log.Debug("uid:%v, draw card:%v discard:%v", a.uid, card, discard)
-	return discard
+	rsp.Card = discard
 }
 
-func (a *agent) Eat(eats []*proto.Eat) (*proto.Eat, int) {
-	eat := eats[0]
-	a.cards = a.DelCard(int(eat.HandCard[0]), int(eat.HandCard[1]), 0)
+func (a *agent) Eat(req *proto.EatReq, rsp *proto.EatRsp) bool {
+	eat := req.Eat[0]
+	a.cards = a.DelCard(eat.HandCard[0], eat.HandCard[1], 0)
 	discard := a.DropSingle()
 	if discard == 0 {
 		discard = a.DropRand()
 	}
 	a.cards = a.DelCard(discard, 0, 0)
-	return eat, discard
+	rsp.Eat, rsp.DisCard = eat, discard
+	return true
 }
 
-func (a *agent) Pong(card int, count int) (int, int) {
-	log.Debug("uid:%v pong cards:%v", a.uid, a.cards)
+func (a *agent) AnGang(req *proto.OperatReq, rsp *proto.OperatRsp) bool {
+	a.cards = append(a.cards, req.DrawReq.Card)
+	a.DelGang(req.PongReq.Card)
+	rsp.Type = proto.OperatType_PongOperat
+	rsp.PongRsp.Card = req.PongReq.Card
+	rsp.PongRsp.Count = 4
+	rsp.PongRsp.DisCard = 0
+	return true
+}
+
+func (a *agent) Pong(req *proto.PongReq, rsp *proto.PongRsp) bool {
+	count, card := req.Count, req.Card
 	if count == 2 {
 		a.cards = a.DelCard(card, card, 0)
 	} else if count == 3 {
 		a.cards = a.DelCard(card, card, card)
 	}
-	log.Debug("uid:%v pong cards:%v", a.uid, a.cards)
 	if count == 3 {
-		return count, 0
+		rsp.Count, rsp.DisCard, rsp.Card = count, 0, card
+		return true
 	}
 	discard := a.DropSingle()
 	if discard == 0 {
 		discard = a.DropRand()
 	}
 	a.cards = a.DelCard(discard, 0, 0)
-	return count, discard
+	rsp.Card, rsp.DisCard, rsp.Count = card, discard, count
+	return true
 }
 
 func (a *agent) OnClose() {
@@ -437,13 +406,10 @@ func main() {
 		client.MaxMsgLen = math.MaxUint32
 		client.NewAgent = func(conn *network.TCPConn) network.Agent {
 			proto.Processor.SetHandler(&proto.UserJoinTableMsg{}, HandlerBroadCastMsg)
-			proto.Processor.SetHandler(&proto.DealCardReq{}, HandlerDealCardMsg)
-			proto.Processor.SetHandler(&proto.HuReq{}, HandlerHuMsg)
-			proto.Processor.SetHandler(&proto.DrawCardReq{}, HandlerDrawCardMsg)
-			proto.Processor.SetHandler(&proto.EatReq{}, HandlerEatMsg)
-			proto.Processor.SetHandler(&proto.PongReq{}, HandlerPongMsg)
+			proto.Processor.SetHandler(&proto.OperatReq{}, HandlerOperatMsg)
 			r := rand.New(rand.NewSource(time.Now().UnixNano()))
 			a := &agent{uid: uid, conn: conn, Processor: proto.Processor, master: is_master, rand: r}
+			a.turn = 0
 			return a
 		}
 
@@ -451,7 +417,6 @@ func main() {
 	}
 
 	// close
-	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, os.Kill)
 	sig := <-c
 	log.Release("Leaf closing down (signal: %v)", sig)
