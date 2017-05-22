@@ -113,8 +113,6 @@ func HandlerOperatMsg(args []interface{}) {
 	} else if req.Type&proto.OperatType_HuOperat != 0 {
 		rsp.Type = proto.OperatType_HuOperat
 		a.Hu(req.HuReq, rsp.HuRsp)
-	} else if req.Type&proto.OperatType_DrawOperat != 0 && req.Type&proto.OperatType_PongOperat != 0 {
-		a.AnGang(req, rsp)
 	} else if req.Type&proto.OperatType_DrawOperat != 0 {
 		rsp.Type = proto.OperatType_DrawOperat
 		a.Draw(req.DrawReq, rsp.DrawRsp)
@@ -124,6 +122,9 @@ func HandlerOperatMsg(args []interface{}) {
 	} else if req.Type&proto.OperatType_EatOperat != 0 {
 		rsp.Type = proto.OperatType_EatOperat
 		a.Eat(req.EatReq, rsp.EatRsp)
+	} else if req.Type&proto.OperatType_DropOperat != 0 {
+		rsp.Type = proto.OperatType_DropOperat
+		a.Drop(req.DropReq, rsp.DropRsp)
 	}
 	log.Release("uid:%v, %v, %v", a.uid, req.Info(), rsp.Info())
 	log.Release("uid:%v, 手牌:%v", a.uid, mahjong.CardsStr(a.cards))
@@ -259,26 +260,28 @@ func (a *agent) DelCard(card1 int32, card2 int32, card3 int32) []int32 {
 	return a.cards
 }
 
-func (a *agent) Draw(req *proto.DrawReq, rsp *proto.DrawRsp) {
-	a.cards = append(a.cards, req.Card)
+func (a *agent) Drop(req *proto.DropReq, rsp *proto.DropRsp) bool {
 	a.separate_result = mahjong.SeparateCards(a.cards, a.hun_card)
 	discard := a.DropSingle()
 	if discard == 0 {
 		discard = a.DropRand()
 	}
 	a.cards = a.DelCard(discard, 0, 0)
-	rsp.Card = discard
+	rsp.DisCard = discard
+	return true
+}
+
+func (a *agent) Draw(req *proto.DrawReq, rsp *proto.DrawRsp) bool {
+	a.cards = append(a.cards, req.Card)
+	a.separate_result = mahjong.SeparateCards(a.cards, a.hun_card)
+	mahjong.SortCards(a.cards, a.hun_card)
+	return true
 }
 
 func (a *agent) Eat(req *proto.EatReq, rsp *proto.EatRsp) bool {
 	eat := req.Eat[0]
 	a.cards = a.DelCard(eat.HandCard[0], eat.HandCard[1], 0)
-	discard := a.DropSingle()
-	if discard == 0 {
-		discard = a.DropRand()
-	}
-	a.cards = a.DelCard(discard, 0, 0)
-	rsp.Eat, rsp.DisCard = eat, discard
+	rsp.Eat = eat
 	return true
 }
 
@@ -288,7 +291,6 @@ func (a *agent) AnGang(req *proto.OperatReq, rsp *proto.OperatRsp) bool {
 	rsp.Type = proto.OperatType_PongOperat
 	rsp.PongRsp.Card = req.PongReq.Card
 	rsp.PongRsp.Count = 4
-	rsp.PongRsp.DisCard = 0
 	return true
 }
 
@@ -299,16 +301,7 @@ func (a *agent) Pong(req *proto.PongReq, rsp *proto.PongRsp) bool {
 	} else if count == 3 {
 		a.cards = a.DelCard(card, card, card)
 	}
-	if count == 3 {
-		rsp.Count, rsp.DisCard, rsp.Card = count, 0, card
-		return true
-	}
-	discard := a.DropSingle()
-	if discard == 0 {
-		discard = a.DropRand()
-	}
-	a.cards = a.DelCard(discard, 0, 0)
-	rsp.Card, rsp.DisCard, rsp.Count = card, discard, count
+	rsp.Card, rsp.Count = card, count
 	return true
 }
 
@@ -390,7 +383,7 @@ func main() {
 	}
 
 	table_start := 10000
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 1; i++ {
 		uid := uint64(table_start)
 		is_master := false
 		if table_start == 10000 {

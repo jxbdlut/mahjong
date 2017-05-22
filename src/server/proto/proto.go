@@ -51,6 +51,7 @@ func NewOperatReq() *OperatReq {
 	req.DrawReq = new(DrawReq)
 	req.PongReq = new(PongReq)
 	req.EatReq = new(EatReq)
+	req.DropReq = new(DropReq)
 	return req
 }
 
@@ -71,6 +72,9 @@ func (m *OperatReq) Info() string {
 	if m.Type & OperatType_EatOperat != 0 {
 		result = append(result, "吃:" + m.EatReq.Info())
 	}
+	if m.Type & OperatType_DropOperat != 0 {
+		result = append(result, "出牌:" + m.DropReq.Info())
+	}
 	return strings.Join(result, ",")
 }
 
@@ -81,6 +85,7 @@ func NewOperatRsp() *OperatRsp {
 	Rsp.DrawRsp = new(DrawRsp)
 	Rsp.PongRsp = new(PongRsp)
 	Rsp.EatRsp = new(EatRsp)
+	Rsp.DropRsp = new(DropRsp)
 	return Rsp
 }
 
@@ -89,13 +94,15 @@ func (m *OperatRsp) Info() string {
 	case OperatType_DealOperat:
 		return "发牌:" + m.DealRsp.Info()
 	case OperatType_DrawOperat:
-		return "出牌:" + m.DrawRsp.Info()
+		return "摸牌:" + m.DrawRsp.Info()
 	case OperatType_HuOperat:
 		return "胡:" + m.HuRsp.Info()
 	case OperatType_PongOperat:
 		return "碰:" + m.PongRsp.Info()
 	case OperatType_EatOperat:
 		return "吃:" + m.EatRsp.Info()
+	case OperatType_DropOperat:
+		return "出牌:" + m.DropRsp.Info()
 	default:
 		return "rsp type err, type:" + fmt.Sprint(m.Type)
 	}
@@ -114,7 +121,7 @@ func (m *DrawReq) Info() string {
 }
 
 func (m *DrawRsp) Info() string {
-	return "[" + mahjong.CardStr(m.Card) + "]"
+	return "[]"
 }
 
 func (m *HuReq) Info() string {
@@ -139,7 +146,7 @@ func (m *EatReq) Info() string {
 }
 
 func (m *EatRsp) Info() string {
-	ret := "[" + m.Eat.Cards() + "],出牌[" + mahjong.CardStr(m.DisCard) + "]"
+	ret := "[" + m.Eat.Cards() + "]"
 	return ret
 }
 
@@ -156,5 +163,13 @@ func (m *PongRsp) Info() string {
 	for i := int32(0); i < m.Count; i++ {
 		cards = append(cards, m.Card)
 	}
-	return mahjong.CardsStr(cards) + fmt.Sprintf(",出牌:[%v]", mahjong.CardStr(m.DisCard))
+	return mahjong.CardsStr(cards)
+}
+
+func (m *DropReq) Info() string {
+	return "[]"
+}
+
+func (m *DropRsp) Info() string {
+	return "[" + mahjong.CardStr(m.DisCard) + "]"
 }

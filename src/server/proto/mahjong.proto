@@ -46,6 +46,7 @@ enum OperatType{
    HuOperat = 0x04;
    EatOperat = 0x08;
    PongOperat = 0x10;
+   DropOperat = 0x20;
 }
 
 message OperatReq
@@ -56,6 +57,7 @@ message OperatReq
     HuReq huReq = 4;
     EatReq eatReq = 5;
     PongReq pongReq = 6;
+    DropReq dropReq = 7;
 }
 
 message OperatRsp
@@ -68,6 +70,7 @@ message OperatRsp
     HuRsp huRsp = 6;
     EatRsp eatRsp = 7;
     PongRsp pongRsp = 8;
+    DropRsp dropRsp = 9;
 }
 
 message DealReq
@@ -90,7 +93,7 @@ message DrawReq
 
 message DrawRsp
 {
-    int32 card = 1;
+
 }
 
 message HuReq
@@ -117,7 +120,6 @@ message EatReq
 message EatRsp
 {
     Eat eat = 1;
-    int32 dis_card = 2;
 }
 
 message PongReq
@@ -137,6 +139,15 @@ message PongRsp
 {
     int32 count = 1;
     int32 card = 2;
+}
+
+message DropReq
+{
+
+}
+
+message DropRsp
+{
     int32 dis_card = 3;
 }
 

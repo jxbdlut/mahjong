@@ -31,8 +31,6 @@ func (a *Agent)HandlerOperatMsg(req *proto.OperatReq) (*proto.OperatRsp, error) 
 	} else if req.Type&proto.OperatType_HuOperat != 0 {
 		rsp.Type = proto.OperatType_HuOperat
 		a.Hu(req.HuReq, rsp.HuRsp)
-	//} else if req.Type&proto.OperatType_DrawOperat != 0 && req.Type&proto.OperatType_PongOperat != 0 {
-	//	a.AnGang(req, rsp)
 	} else if req.Type&proto.OperatType_DrawOperat != 0 {
 		rsp.Type = proto.OperatType_DrawOperat
 		a.Draw(req.DrawReq, rsp.DrawRsp)
@@ -42,6 +40,9 @@ func (a *Agent)HandlerOperatMsg(req *proto.OperatReq) (*proto.OperatRsp, error) 
 	} else if req.Type&proto.OperatType_EatOperat != 0 {
 		rsp.Type = proto.OperatType_EatOperat
 		a.Eat(req.EatReq, rsp.EatRsp)
+	} else if req.Type&proto.OperatType_DropOperat != 0 {
+		rsp.Type = proto.OperatType_DropOperat
+		a.Drop(req.DropReq, rsp.DropRsp)
 	}
 	return rsp, nil
 }
@@ -55,47 +56,28 @@ func (a *Agent) Deal(req *proto.DealReq, rsp *proto.DealRsp) bool {
 	return true
 }
 
-func (a *Agent)Draw(req *proto.DrawReq, rsp *proto.DrawRsp) {
+func (a *Agent) Draw(req *proto.DrawReq, rsp *proto.DrawRsp) bool {
+	return true
+}
+
+func (a *Agent)Drop(req *proto.DropReq, rsp *proto.DropRsp) bool {
 	cards_copy := mahjong.Copy(a.player.cards)
 	separate_result := mahjong.SeparateCards(cards_copy, a.player.table.hun_card)
 	discard := DropSingle(separate_result)
 	if discard == 0 {
 		discard = DropRand(cards_copy, a.player.table.hun_card)
 	}
-	rsp.Card = discard
+	rsp.DisCard = discard
+	return true
 }
 
 func (a *Agent)Eat(req *proto.EatReq, rsp *proto.EatRsp) bool {
-	eat := req.Eat[0]
-	cards_copy := mahjong.Copy(a.player.cards)
-	cards_copy = mahjong.DelCard(cards_copy, eat.HandCard[0], eat.HandCard[1], 0)
-	separate_result := mahjong.SeparateCards(cards_copy, a.player.table.hun_card)
-	discard := DropSingle(separate_result)
-	if discard == 0 {
-		discard = DropRand(cards_copy, a.player.table.hun_card)
-	}
-	rsp.Eat, rsp.DisCard = eat, discard
+	rsp.Eat = req.Eat[0]
 	return true
 }
 
 func (a *Agent)Pong(req *proto.PongReq, rsp *proto.PongRsp) bool {
-	cards_copy := mahjong.Copy(a.player.cards)
-	count, card := req.Count, req.Card
-	if count == 2 {
-		cards_copy = mahjong.DelCard(cards_copy, card, card, 0)
-	} else if count == 3 {
-		cards_copy = mahjong.DelCard(cards_copy, card, card, card)
-	}
-	if count == 3 {
-		rsp.Count, rsp.DisCard, rsp.Card = count, 0, card
-		return true
-	}
-	separate_result := mahjong.SeparateCards(cards_copy, a.player.table.hun_card)
-	discard := DropSingle(separate_result)
-	if discard == 0 {
-		discard = DropRand(cards_copy, a.player.table.hun_card)
-	}
-	rsp.Card, rsp.DisCard, rsp.Count = card, discard, count
+	rsp.Card, rsp.Count = req.Card, req.Count
 	return true
 }
 

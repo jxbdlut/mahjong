@@ -5,9 +5,9 @@ import (
 	"github.com/name5566/leaf/gate"
 	"github.com/name5566/leaf/log"
 	"math/rand"
+	"server/mahjong"
 	"server/userdata"
 	"time"
-	"server/mahjong"
 )
 
 type Table struct {
@@ -144,7 +144,7 @@ func (t *Table) Deal() {
 		player.Clear()
 		player.FeedCard(t.left_cards[:13])
 		t.left_cards = append(t.left_cards[:0], t.left_cards[13:]...)
-		log.Debug("%v", player)
+		log.Release("%v", player)
 	}
 	t.fan_card = t.DrawCard()
 	t.hun_card = t.NextCard(t.fan_card)
@@ -598,20 +598,21 @@ func (t *Table) GetTingCards(p *Player) map[int32]interface{} {
 	return result
 }
 
-func (t *Table)AllOnline() bool {
+func (t *Table)GetOnlineNum() int {
+	num := 0
 	for _, player := range t.players {
-		if !player.online {
-			return false
+		if player.online {
+			num++
 		}
 	}
-	return true
+	return num
 }
 
 func (t *Table) Play() {
 	t.play_count++
 	t.Shuffle()
 	t.Deal()
-	for len(t.left_cards) > 10 && t.win_player == nil && len(t.players) == 4 && t.AllOnline() {
+	for len(t.left_cards) > 10 && t.win_player == nil && len(t.players) == 4 {
 		player := t.players[t.play_turn]
 		t.play_turn = (t.play_turn + 1) % len(t.players)
 		discard := player.Draw(false)
@@ -630,18 +631,27 @@ func (t *Table) Play() {
 }
 
 func (t *Table) Run() {
+	start := time.Now().UTC()
 	for {
 		if len(t.players) == 0 {
 			break
 		} else if len(t.players) < 4 {
 			log.Debug("tid:%v, waiting agent join, agent num:%v", t.tid, len(t.players))
-		} else {
+			time.Sleep(time.Second)
+			//todo
+		} else if t.GetOnlineNum() > 3 {
 			t.Clear()
 			t.Play()
 			log.Debug("tid:%v, running, play_count:%v, players num:%v, left_cards num:%d", t.tid, t.play_count, len(t.players), len(t.left_cards))
-			time.Sleep(1 * time.Second)
+			time.Sleep(1 * time.Millisecond)
+			start = time.Now().UTC()
 		}
 		time.Sleep(50 * time.Millisecond)
+		now := time.Now().UTC()
+		if start.Add(100 * time.Second).Before(now) {
+			log.Error("tid:%v, timeout, start:%v, now:%v", t.tid, start, now)
+			break
+		}
 	}
 	for _, player := range t.players {
 		t.RemoveAgent(player)
