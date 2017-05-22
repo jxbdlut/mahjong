@@ -25,6 +25,7 @@ type Player struct {
 	online          bool
 	table           *Table
 	robot           robot
+	isRobot			bool
 	timeout         time.Duration
 }
 
@@ -37,12 +38,15 @@ func NewPlayer(agent gate.Agent, uid uint64) *Player {
 	p.agent = agent
 	p.uid = uid
 	p.win_card = 0
-	p.robot = NewAgent(p)
+	p.robot = NewRobot(p)
 	p.timeout = 10
+	if MinRobotId <= uid && uid <= MaxRobotId {
+		p.isRobot = true
+	}
 	return p
 }
 
-func (p *Player) SetAgent(agent gate.Agent)  {
+func (p *Player) SetAgent(agent gate.Agent) {
 	p.agent = agent
 	p.SetOnline(true)
 }
@@ -165,7 +169,7 @@ func (p *Player) Deal() {
 	req.DealReq.HunCard = int32(p.table.hun_card)
 	rsp, err := p.Notify(req)
 	if err != nil {
-		log.Debug("uid:%v, Deal err:%v", p.uid, err)
+		log.Error("uid:%v, Deal err:%v", p.uid, err)
 		return
 	}
 	result, err := p.ValidRsp(req, rsp.(*proto.OperatRsp))
@@ -177,12 +181,11 @@ func (p *Player) Deal() {
 	return
 }
 
-
 // card为零的情况是吃或者碰之后出错，要随即出一张牌
 func (p *Player) Drop(card int32) int32 {
 	discard := card
 	if discard == 0 {
-		discard = p.cards[len(p.cards) -1 ]
+		discard = p.cards[len(p.cards)-1]
 	}
 	req := proto.NewOperatReq()
 	req.Type = proto.OperatType_DropOperat
@@ -262,6 +265,9 @@ func (p *Player) SendRcv(msg interface{}) (interface{}, error) {
 }
 
 func (p *Player) Notify(req *proto.OperatReq) (interface{}, error) {
+	if p.isRobot {
+		return p.robot.HandlerOperatMsg(req)
+	}
 	if p.online {
 		rsp, err := p.SendRcv(req)
 		if err != nil {
@@ -270,6 +276,7 @@ func (p *Player) Notify(req *proto.OperatReq) (interface{}, error) {
 		}
 		return rsp, nil
 	} else {
+		p.WriteMsg(req)
 		return p.robot.HandlerOperatMsg(req)
 	}
 	return nil, errors.New("online error")
@@ -310,15 +317,15 @@ func (p *Player) ValidRsp(req *proto.OperatReq, rsp *proto.OperatRsp) (interface
 	}
 	switch rsp.Type {
 	case proto.OperatType_DealOperat:
-		if req.Type & proto.OperatType_DealOperat != 0 {
+		if req.Type&proto.OperatType_DealOperat != 0 {
 			return nil, nil
 		}
 	case proto.OperatType_DrawOperat:
-		if req.Type & proto.OperatType_DrawOperat != 0 {
+		if req.Type&proto.OperatType_DrawOperat != 0 {
 			return nil, nil
 		}
 	case proto.OperatType_DropOperat:
-		if req.Type & proto.OperatType_DropOperat != 0 {
+		if req.Type&proto.OperatType_DropOperat != 0 {
 			if p.ValidDrop(rsp.DropRsp.DisCard) {
 				return rsp.DropRsp, nil
 			} else {
@@ -327,11 +334,11 @@ func (p *Player) ValidRsp(req *proto.OperatReq, rsp *proto.OperatRsp) (interface
 			}
 		}
 	case proto.OperatType_HuOperat:
-		if req.Type & proto.OperatType_HuOperat != 0 {
+		if req.Type&proto.OperatType_HuOperat != 0 {
 			return rsp.HuRsp.Ok, nil
 		}
 	case proto.OperatType_PongOperat:
-		if req.Type & proto.OperatType_PongOperat != 0 {
+		if req.Type&proto.OperatType_PongOperat != 0 {
 			count := rsp.PongRsp.Count
 			card := req.PongReq.Card
 			if count == 0 || (count > 1 && count <= req.PongReq.Count && card == rsp.PongRsp.Card) {
@@ -342,7 +349,7 @@ func (p *Player) ValidRsp(req *proto.OperatReq, rsp *proto.OperatRsp) (interface
 			}
 		}
 	case proto.OperatType_EatOperat:
-		if req.Type & proto.OperatType_EatOperat != 0 {
+		if req.Type&proto.OperatType_EatOperat != 0 {
 			if p.ValidEat(req.EatReq, rsp.EatRsp) {
 				return rsp.EatRsp, nil
 			} else {
@@ -520,7 +527,7 @@ func (p *Player) SetOnline(online bool) {
 	if online {
 		p.timeout = 10
 	} else {
-		p.timeout = 1
+		p.timeout = 0
 	}
 }
 

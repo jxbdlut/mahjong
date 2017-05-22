@@ -8,10 +8,12 @@ import (
 	"server/mahjong"
 	"server/userdata"
 	"time"
+	"server/proto"
 )
 
 type Table struct {
 	tid         uint32
+	tableType   proto.CreateTableReq_TableType
 	players     []*Player
 	play_count  uint32
 	play_turn   int
@@ -25,9 +27,10 @@ type Table struct {
 	call_time   int
 }
 
-func NewTable(tid uint32) *Table {
+func NewTable(tid uint32, tableType proto.CreateTableReq_TableType) *Table {
 	t := new(Table)
 	t.tid = tid
+	t.tableType = tableType
 	t.play_turn = 0
 	t.drop_record = make(map[*Player][]int32)
 	return t
@@ -598,10 +601,11 @@ func (t *Table) GetTingCards(p *Player) map[int32]interface{} {
 	return result
 }
 
-func (t *Table)GetOnlineNum() int {
+func (t *Table) GetOnlineNum() int {
 	num := 0
 	for _, player := range t.players {
-		if player.online {
+		log.Debug("uid:%v online:%v", player.uid, player.online)
+		if player.online && !player.isRobot{
 			num++
 		}
 	}
@@ -630,20 +634,31 @@ func (t *Table) Play() {
 	}
 }
 
+func (t *Table) waitPlayer() bool {
+	if t.tableType == proto.CreateTableReq_TableNomal {
+		if len(t.players) < 4 {
+			return true
+		}
+	} else if t.tableType == proto.CreateTableReq_TableRobot && t.GetOnlineNum() > 0 {
+		return false
+	}
+	return true
+}
+
 func (t *Table) Run() {
 	start := time.Now().UTC()
 	for {
 		if len(t.players) == 0 {
 			break
-		} else if len(t.players) < 4 {
+		} else if t.waitPlayer() {
 			log.Debug("tid:%v, waiting agent join, agent num:%v", t.tid, len(t.players))
 			time.Sleep(time.Second)
 			//todo
-		} else if t.GetOnlineNum() > 3 {
+		} else {
 			t.Clear()
 			t.Play()
 			log.Debug("tid:%v, running, play_count:%v, players num:%v, left_cards num:%d", t.tid, t.play_count, len(t.players), len(t.left_cards))
-			time.Sleep(1 * time.Millisecond)
+			time.Sleep(1 * time.Second)
 			start = time.Now().UTC()
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -657,4 +672,5 @@ func (t *Table) Run() {
 		t.RemoveAgent(player)
 	}
 	log.Debug("tid:%v, is over", t.tid)
+
 }

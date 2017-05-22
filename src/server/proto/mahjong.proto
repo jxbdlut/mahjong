@@ -17,7 +17,11 @@ message LoginRsp
 
 message CreateTableReq
 {
-    uint64 uid = 1;
+    enum TableType {
+        TableRobot = 0;
+        TableNomal = 1;
+    }
+    int32 type = 2;
 }
 
 message CreateTableRsp
@@ -29,7 +33,6 @@ message CreateTableRsp
 
 message JoinTableReq
 {
-    uint64 uid = 1;
     uint32 table_id = 2;
 }
 
@@ -39,7 +42,7 @@ message JoinTableRsp
     string err_msg = 2;
 }
 
-enum OperatType{
+enum OperatType {
    Unkonw = 0x00;
    DealOperat = 0x01;
    DrawOperat = 0x02;
@@ -157,6 +160,16 @@ message UserJoinTableMsg
     uint64 uid = 2;
     string name = 3;
     int32 pos = 4;
+}
+
+message OperatMsg
+{
+    uint64 uid = 1;
+    OperatType type = 2;
+    HuRsp hu = 3;
+    EatRsp eat = 4;
+    PongRsp pong = 5;
+    DropRsp drop = 6;
 }
 
 service MahjongService {

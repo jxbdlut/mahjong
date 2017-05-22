@@ -3,6 +3,8 @@ package mahjong
 import (
 	"strings"
 	"sort"
+	"time"
+	"math/rand"
 )
 
 var (
@@ -97,4 +99,51 @@ func SortCards(cards []int32, hun_card int32) {
 			return cards[i] < cards[j]
 		}
 	})
+}
+
+func DropSingle(separate_result [5][]int32) int32 {
+	wind_cards := separate_result[4]
+	if len(wind_cards) == 1 {
+		return wind_cards[0]
+	} else {
+		for _, card := range wind_cards {
+			if Count(wind_cards, card) == 1 {
+				return card
+			}
+		}
+	}
+
+	for i := 1; i < 4; i++ {
+		min_card, max_card := int32(i*100+1), int32(i*100+9)
+		if Count(separate_result[i], min_card) == 1 && Count(separate_result[i], min_card+1) == 0 && Count(separate_result[i], min_card+2) == 0 {
+			return min_card
+		}
+		if Count(separate_result[i], max_card) == 1 && Count(separate_result[i], max_card-1) == 0 && Count(separate_result[i], max_card-2) == 0 {
+			return max_card
+		}
+	}
+
+	for i := 1; i < 4; i++ {
+		for _, card := range separate_result[i] {
+			if Count(separate_result[i], card) > 1 {
+				continue
+			} else if Count(separate_result[i], card+1) > 0 || Count(separate_result[i], card-1) > 0 {
+				continue
+			} else {
+				return card
+			}
+		}
+	}
+
+	return 0
+}
+
+func DropRand(cards []int32, hun_card int32) int32 {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for {
+		index := r.Intn(len(cards))
+		if hun_card != cards[index] {
+			return cards[index]
+		}
+	}
 }

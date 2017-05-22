@@ -31,7 +31,6 @@ func handleLogin(args []interface{}) {
 	md5Ctx.Write([]byte(strconv.FormatUint(req.Uid, 10)))
 	cipherStr := md5Ctx.Sum(nil)
 	passwd := hex.EncodeToString(cipherStr)
-	log.Debug("passwd:%v", passwd)
 	if strings.Compare(passwd, req.Passwd) == 0 {
 		a.SetUserData(&userdata.UserData{
 			Uid:  req.Uid,

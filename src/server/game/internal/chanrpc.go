@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	skeleton.RegisterChanRPC("NewAgent", rpcNewAgent)
+	skeleton.RegisterChanRPC("NewRobot", rpcNewAgent)
 	skeleton.RegisterChanRPC("CloseAgent", rpcCloseAgent)
 }
 

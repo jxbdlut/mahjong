@@ -38,7 +38,7 @@ type agent struct {
 }
 
 var (
-	tid_chan = make(chan uint32)
+	tid_chan = make(chan uint32, 3)
 	c        = make(chan os.Signal, 1)
 )
 
@@ -70,7 +70,7 @@ func (a *agent) Login() error {
 func (a *agent) CreateTable() (uint32, error) {
 	if a.uid != 0 {
 		a.WriteMsg(&proto.CreateTableReq{
-			Uid: a.uid,
+			Type: int32(proto.CreateTableReq_TableRobot),
 		})
 		createTableRsp, err := a.ReadMsg()
 		if err != nil {
@@ -85,7 +85,6 @@ func (a *agent) CreateTable() (uint32, error) {
 
 func (a *agent) JoinTable(tid uint32) error {
 	a.WriteMsg(&proto.JoinTableReq{
-		Uid:     a.uid,
 		TableId: tid,
 	})
 	joinTableRsp, err := a.ReadMsg()
@@ -156,7 +155,7 @@ func (a *agent) Run() {
 		}
 		msg, err := a.ReadMsg()
 		if err != nil {
-			log.Error("read message:", err)
+			log.Error("read message:%v", err)
 			break
 		}
 
@@ -188,52 +187,6 @@ func (a *agent) Deal(req *proto.DealReq, rsp *proto.DealRsp) bool {
 	return true
 }
 
-func (a *agent) DropSingle() int32 {
-	wind_cards := a.separate_result[4]
-	if len(wind_cards) == 1 {
-		return wind_cards[0]
-	} else {
-		for _, card := range wind_cards {
-			if mahjong.Count(wind_cards, card) == 1 {
-				return card
-			}
-		}
-	}
-
-	for i := 1; i < 4; i++ {
-		min_card, max_card := int32(i*100+1), int32(i*100+9)
-		if mahjong.Count(a.separate_result[i], min_card) == 1 && mahjong.Count(a.separate_result[i], min_card+1) == 0 && mahjong.Count(a.separate_result[i], min_card+2) == 0 {
-			return min_card
-		}
-		if mahjong.Count(a.separate_result[i], max_card) == 1 && mahjong.Count(a.separate_result[i], max_card-1) == 0 && mahjong.Count(a.separate_result[i], max_card-2) == 0 {
-			return max_card
-		}
-	}
-
-	for i := 1; i < 4; i++ {
-		for _, card := range a.separate_result[i] {
-			if mahjong.Count(a.separate_result[i], card) > 1 {
-				continue
-			} else if mahjong.Count(a.separate_result[i], card+1) > 0 || mahjong.Count(a.separate_result[i], card-1) > 0 {
-				continue
-			} else {
-				return card
-			}
-		}
-	}
-
-	return 0
-}
-
-func (a *agent) DropRand() int32 {
-	for {
-		index := a.rand.Intn(len(a.cards))
-		if a.hun_card != a.cards[index] {
-			return a.cards[index]
-		}
-	}
-}
-
 func (a *agent) DelGang(card int32) {
 	for i := 0; i < 4; i++ {
 		index := mahjong.Index(a.cards, card)
@@ -262,9 +215,9 @@ func (a *agent) DelCard(card1 int32, card2 int32, card3 int32) []int32 {
 
 func (a *agent) Drop(req *proto.DropReq, rsp *proto.DropRsp) bool {
 	a.separate_result = mahjong.SeparateCards(a.cards, a.hun_card)
-	discard := a.DropSingle()
+	discard := mahjong.DropSingle(a.separate_result)
 	if discard == 0 {
-		discard = a.DropRand()
+		discard = mahjong.DropRand(a.cards, a.hun_card)
 	}
 	a.cards = a.DelCard(discard, 0, 0)
 	rsp.DisCard = discard
@@ -282,15 +235,6 @@ func (a *agent) Eat(req *proto.EatReq, rsp *proto.EatRsp) bool {
 	eat := req.Eat[0]
 	a.cards = a.DelCard(eat.HandCard[0], eat.HandCard[1], 0)
 	rsp.Eat = eat
-	return true
-}
-
-func (a *agent) AnGang(req *proto.OperatReq, rsp *proto.OperatRsp) bool {
-	a.cards = append(a.cards, req.DrawReq.Card)
-	a.DelGang(req.PongReq.Card)
-	rsp.Type = proto.OperatType_PongOperat
-	rsp.PongRsp.Card = req.PongReq.Card
-	rsp.PongRsp.Count = 4
 	return true
 }
 
