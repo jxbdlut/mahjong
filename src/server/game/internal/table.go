@@ -24,7 +24,14 @@ type Table struct {
 	hun_card    int32
 	round       int
 	drop_record map[*Player][]int32
-	call_time   int
+}
+
+type DisCardType int32
+
+type DisCard struct {
+	card int32
+	disCardType DisCardType
+	player  *Player
 }
 
 func NewTable(tid uint32, tableType proto.CreateTableReq_TableType) *Table {
@@ -204,16 +211,17 @@ func (t *Table) DisCard(p *Player, dis_card int32, huType proto.HuType) {
 
 	for i := 1; i < len(t.players); i++ {
 		player := t.players[(t.play_turn+i)%len(t.players)]
-		if dis_card, count := player.CheckGangOrPong(dis_card); count > 0 {
+		if dis_card, ok := player.CheckGangOrPong(dis_card); ok {
 			pos, err := t.GetPlayerIndex(player.uid)
 			if err != nil {
 				log.Error("GetPlayerIndex err:", err)
 				return
 			}
 			t.play_turn = (pos + 1) % len(t.players)
-			if count > 2 {
-				huType = proto.HuType_QiangGang
-			}
+			//todo
+			//if count > 2 {
+			//	huType = proto.HuType_QiangGang
+			//}
 			t.DisCard(player, dis_card, huType)
 			return
 		}
@@ -296,7 +304,6 @@ func (t *Table) Remove(cards []int32, card1 int32, card2 int32, card3 int32) []i
 }
 
 func (t *Table) GetNeedHunInSub(sub_cards []int32, hun_num int, need_hun_count int) int {
-	t.call_time++
 	if need_hun_count == 0 {
 		return need_hun_count
 	}
@@ -659,7 +666,7 @@ func (t *Table) Run() {
 			t.Clear()
 			t.Play()
 			log.Debug("tid:%v, running, play_count:%v, players num:%v, left_cards num:%d", t.tid, t.play_count, len(t.players), len(t.left_cards))
-			time.Sleep(1 * time.Second)
+			time.Sleep(1 * time.Millisecond)
 			start = time.Now().UTC()
 		}
 		time.Sleep(50 * time.Millisecond)

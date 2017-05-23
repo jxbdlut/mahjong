@@ -7,7 +7,10 @@ import (
 	"strings"
 )
 
-var Processor = protobuf.NewProcessor()
+var (
+	Processor = protobuf.NewProcessor()
+	GangTypeMap = map[GangType]string{GangType_MingGang: "明杠", GangType_BuGang: "补杠", GangType_AnGang: "暗杠"}
+)
 
 func init() {
 	Processor.Register(&LoginReq{})
@@ -27,6 +30,11 @@ func init() {
 //func printRegistedMsg(id uint16, t reflect.Type) {
 //	log.Debug("id:%v, type:%v", id, t)
 //}
+
+
+func GangTypeStr(gangType GangType) string {
+	return GangTypeMap[gangType]
+}
 
 func (m *Eat) Equal(eat *Eat) bool {
 	if len(m.HandCard) != len(eat.HandCard) || len(m.WaveCard) != len(eat.WaveCard) {
@@ -81,13 +89,19 @@ func (m *OperatReq) Info() string {
 	if m.Type&OperatType_PongOperat != 0 {
 		result = append(result, "碰:"+m.PongReq.Info())
 	}
+	if m.Type&OperatType_GangOperat != 0 {
+		result = append(result, "杠:"+m.GangReq.Info())
+	}
 	if m.Type&OperatType_EatOperat != 0 {
 		result = append(result, "吃:"+m.EatReq.Info())
 	}
 	if m.Type&OperatType_DropOperat != 0 {
 		result = append(result, "出牌:"+m.DropReq.Info())
 	}
-	return strings.Join(result, ",")
+	if len(result) == 0 {
+		return "req type err"
+	}
+	return "[" + strings.Join(result, ",") + "]"
 }
 
 func NewOperatRsp() *OperatRsp {
@@ -103,22 +117,32 @@ func NewOperatRsp() *OperatRsp {
 }
 
 func (m *OperatRsp) Info() string {
-	switch m.Type {
-	case OperatType_DealOperat:
-		return "发牌:" + m.DealRsp.Info()
-	case OperatType_DrawOperat:
-		return "摸牌:" + m.DrawRsp.Info()
-	case OperatType_HuOperat:
-		return "胡:" + m.HuRsp.Info()
-	case OperatType_PongOperat:
-		return "碰:" + m.PongRsp.Info()
-	case OperatType_EatOperat:
-		return "吃:" + m.EatRsp.Info()
-	case OperatType_DropOperat:
-		return "出牌:" + m.DropRsp.Info()
-	default:
-		return "rsp type err, type:" + fmt.Sprint(m.Type)
+	var result []string
+	if m.Type&OperatType_DealOperat != 0 {
+		result = append(result, "发牌:"+m.DealRsp.Info())
 	}
+	if m.Type&OperatType_HuOperat != 0 {
+		result = append(result, "胡:"+m.HuRsp.Info())
+	}
+	if m.Type&OperatType_DrawOperat != 0 {
+		result = append(result, "摸牌:"+m.DrawRsp.Info())
+	}
+	if m.Type&OperatType_PongOperat != 0 {
+		result = append(result, "碰:"+m.PongRsp.Info())
+	}
+	if m.Type&OperatType_GangOperat != 0 {
+		result = append(result, "杠:"+m.GangRsp.Info())
+	}
+	if m.Type&OperatType_EatOperat != 0 {
+		result = append(result, "吃:"+m.EatRsp.Info())
+	}
+	if m.Type&OperatType_DropOperat != 0 {
+		result = append(result, "出牌:"+m.DropRsp.Info())
+	}
+	if len(result) == 0 {
+		return "rsp type err"
+	}
+	return "[" + strings.Join(result, ",") + "]"
 }
 
 func (m *DealReq) Info() string {
@@ -146,38 +170,54 @@ func (m *HuRsp) Info() string {
 	return "[" + fmt.Sprintf("%v, card:%v, type:%v, loser:%v", m.Ok, mahjong.CardStr(m.Card), m.Type, m.Lose) + "]"
 }
 
-func (m *Eat) Cards() string {
+func (m *Eat) Info() string {
 	return mahjong.CardsStr(m.HandCard) + "/" + mahjong.CardsStr(m.WaveCard)
 }
 
 func (m *EatReq) Info() string {
 	var str_eats []string
 	for _, eat := range m.Eat {
-		str_eats = append(str_eats, eat.Cards())
+		str_eats = append(str_eats, eat.Info())
 	}
 	ret := "[" + strings.Join(str_eats, ",") + "]"
 	return ret
 }
 
 func (m *EatRsp) Info() string {
-	ret := "[" + m.Eat.Cards() + "]"
+	ret := "[" + m.Eat.Info() + "]"
 	return ret
 }
 
 func (m *PongReq) Info() string {
-	cards := []int32{}
-	for i := int32(0); i < 2; i++ {
-		cards = append(cards, m.Card)
-	}
+	cards := []int32{m.Card, m.Card}
 	return mahjong.CardsStr(cards)
 }
 
 func (m *PongRsp) Info() string {
-	cards := []int32{}
-	for i := int32(0); i < 2; i++ {
-		cards = append(cards, m.Card)
+	if m.Ok {
+		cards := []int32{m.Card, m.Card}
+		return mahjong.CardsStr(cards)
 	}
-	return mahjong.CardsStr(cards)
+	return fmt.Sprintf("[%v]", m.Ok)
+}
+
+func (m *Gang) Info() string {
+	return fmt.Sprintf("[%v, %v]", mahjong.CardStr(m.Card), GangTypeStr(m.Type))
+}
+
+func (m *GangReq) Info() string {
+	var strGangs []string
+	for _, gang := range m.Gang {
+		strGangs = append(strGangs, gang.Info())
+	}
+	return "[" + strings.Join(strGangs, ",") + "]"
+}
+
+func (m *GangRsp) Info() string {
+	if m.Ok {
+		return m.Gang.Info()
+	}
+	return fmt.Sprintf("[%v]", m.Ok)
 }
 
 func (m *DropReq) Info() string {
@@ -195,26 +235,37 @@ func NewOperatMsg() *OperatMsg {
 	msg.Draw = new(DrawRsp)
 	msg.Pong = new(PongRsp)
 	msg.Eat = new(EatRsp)
+	msg.Gang = new(GangRsp)
 	msg.Drop = new(DropRsp)
 	return msg
 }
 
 func (m *OperatMsg) Info() string {
 	str := fmt.Sprintf("uid:%v, ", m.Uid)
-	switch m.Type {
-	case OperatType_DealOperat:
-		return str + "发牌:" + m.Deal.Info()
-	case OperatType_DrawOperat:
-		return str + "摸牌:" + m.Draw.Info()
-	case OperatType_HuOperat:
-		return str + "胡:" + m.Hu.Info()
-	case OperatType_PongOperat:
-		return str + "碰:" + m.Pong.Info()
-	case OperatType_EatOperat:
-		return str + "吃:" + m.Eat.Info()
-	case OperatType_DropOperat:
-		return str + "出牌:" + m.Drop.Info()
-	default:
-		return "rsp type err, type:" + fmt.Sprint(m.Type)
+	var result []string
+	if m.Type&OperatType_DealOperat != 0 {
+		result = append(result, "发牌:"+m.Deal.Info())
 	}
+	if m.Type&OperatType_HuOperat != 0 {
+		result = append(result, "胡:"+m.Hu.Info())
+	}
+	if m.Type&OperatType_DrawOperat != 0 {
+		result = append(result, "摸牌:"+m.Draw.Info())
+	}
+	if m.Type&OperatType_PongOperat != 0 {
+		result = append(result, "碰:"+m.Pong.Info())
+	}
+	if m.Type&OperatType_GangOperat != 0 {
+		result = append(result, "杠"+m.Gang.Info())
+	}
+	if m.Type&OperatType_EatOperat != 0 {
+		result = append(result, "吃:"+m.Eat.Info())
+	}
+	if m.Type&OperatType_DropOperat != 0 {
+		result = append(result, "出牌:"+m.Drop.Info())
+	}
+	if len(result) == 0 {
+		return "rsp type err"
+	}
+	return str + strings.Join(result, ",")
 }

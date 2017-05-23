@@ -40,6 +40,15 @@ func Count(cards []int32, card int32) int32 {
 	return count
 }
 
+func Contain(elems []int32, elem int32) bool {
+	for _, e := range elems {
+		if e == elem {
+			return true
+		}
+	}
+	return false
+}
+
 func Index(cards []int32, card int32) int32 {
 	for i, c := range cards {
 		if c == card {

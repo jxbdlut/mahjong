@@ -171,6 +171,7 @@ message GangRsp {
     Gang gang = 2;
 }
 
+
 message DropReq
 {
     int32 card = 2;
@@ -198,7 +199,8 @@ message OperatMsg
     HuRsp hu = 5;
     EatRsp eat = 6;
     PongRsp pong = 7;
-    DropRsp drop = 8;
+    GangRsp gang = 8;
+    DropRsp drop = 9;
 }
 
 service MahjongService {

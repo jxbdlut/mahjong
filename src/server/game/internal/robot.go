@@ -30,6 +30,9 @@ func (a *BaseRobot)HandlerOperatMsg(req *proto.OperatReq) (*proto.OperatRsp, err
 	} else if req.Type&proto.OperatType_DrawOperat != 0 {
 		rsp.Type = proto.OperatType_DrawOperat
 		a.Draw(req.DrawReq, rsp.DrawRsp)
+	} else if req.Type&proto.OperatType_GangOperat != 0 {
+		rsp.Type = proto.OperatType_GangOperat
+		a.Gang(req.GangReq, rsp.GangRsp)
 	} else if req.Type&proto.OperatType_PongOperat != 0 {
 		rsp.Type = proto.OperatType_PongOperat
 		a.Pong(req.PongReq, rsp.PongRsp)
@@ -72,6 +75,12 @@ func (a *BaseRobot)Drop(req *proto.DropReq, rsp *proto.DropRsp) bool {
 
 func (a *BaseRobot)Eat(req *proto.EatReq, rsp *proto.EatRsp) bool {
 	rsp.Eat = req.Eat[0]
+	return true
+}
+
+func (a *BaseRobot) Gang(req *proto.GangReq, rsp *proto.GangRsp) bool {
+	rsp.Ok = true
+	rsp.Gang = req.Gang[0]
 	return true
 }
 
