@@ -24,7 +24,7 @@ type agent struct {
 	uid             uint64
 	name            string
 	pos             int
-	others          []*agent
+	others          map[uint64]int
 	cards           []int32
 	fan_card        int32
 	hun_card        int32
@@ -35,11 +35,20 @@ type agent struct {
 	rand            *rand.Rand
 	separate_result [5][]int32
 	turn            int
+	loginChan       chan interface{}
+	joinTableChan   chan interface{}
+	createTableChan chan interface{}
 }
 
+const (
+	PlayerNum = 1
+	TableType = proto.CreateTableReq_TableRobot
+)
+
 var (
-	tid_chan = make(chan uint32, 3)
-	c        = make(chan os.Signal, 1)
+	tidChan = make(chan uint32, 3)
+	c       = make(chan os.Signal, 1)
+	others  = make(map[uint64]int)
 )
 
 func (a *agent) Login() error {
@@ -52,13 +61,8 @@ func (a *agent) Login() error {
 		Name:   a.name,
 		Passwd: crypt_passwd,
 	})
-	loginRsp, err := a.ReadMsg()
-	if err != nil {
-		log.Debug("read message: %v", err)
-		return errors.New("read message err")
-	}
-
-	log.Debug("loginRsp:%v", loginRsp)
+	loginRsp := <-a.loginChan
+	log.Debug("uid:%v loginRsp:%v", a.uid, loginRsp)
 	if loginRsp.(*proto.LoginRsp).GetErrCode() == 0 {
 		a.uid = a.uid
 		return nil
@@ -67,44 +71,65 @@ func (a *agent) Login() error {
 	}
 }
 
+func HandlerLoginRsp(args []interface{}) {
+	msg := args[0].(*proto.LoginRsp)
+	a := args[1].(*agent)
+	log.Debug("uid:%v LoginRsp:%v", a.uid, msg)
+	a.loginChan <- msg
+}
+
 func (a *agent) CreateTable() (uint32, error) {
 	if a.uid != 0 {
 		a.WriteMsg(&proto.CreateTableReq{
-			Type: int32(proto.CreateTableReq_TableRobot),
+			Type: int32(TableType),
 		})
-		createTableRsp, err := a.ReadMsg()
-		if err != nil {
-			log.Error("create table readmsg: ", err)
-			return 0, err
-		}
-		log.Debug("createTableRsp:%v", createTableRsp)
-		return createTableRsp.(*proto.CreateTableRsp).GetTableId(), nil
+		msg := <-a.createTableChan
+		log.Debug("uid:%v createTableRsp:%v", a.uid, msg)
+		return msg.(*proto.CreateTableRsp).GetTableId(), nil
 	}
 	return 0, nil
+}
+
+func HandlerCreateTableRsp(args []interface{}) {
+	msg := args[0].(*proto.CreateTableRsp)
+	a := args[1].(*agent)
+	log.Debug("uid:%v createTableRsp:%v", a.uid, msg)
+	a.createTableChan <- msg
 }
 
 func (a *agent) JoinTable(tid uint32) error {
 	a.WriteMsg(&proto.JoinTableReq{
 		TableId: tid,
 	})
-	joinTableRsp, err := a.ReadMsg()
-	if err != nil {
-		log.Error("join table readmsg: ", err)
-		return err
-	}
-	log.Debug("join table:%v rsp:%v", tid, joinTableRsp)
+	msg := <-a.joinTableChan
+	log.Debug("uid:%v join table:%v rsp:%v", a.uid, msg)
 	return nil
 }
 
-func HandlerBroadCastMsg(args []interface{}) {
-	msg := args[0]
-	log.Debug("broadcast:%v", msg)
+func HandlerJoinTableRsp(args []interface{}) {
+	msg := args[0].(*proto.JoinTableRsp)
+	a := args[1].(*agent)
+	log.Debug("uid:%v join table:%v rsp:%v", a.uid, msg)
+	a.joinTableChan <- msg
+}
+
+func HandlerJoinTableMsg(args []interface{}) {
+	msg := args[0].(*proto.UserJoinTableMsg)
+	uid := msg.Uid
+	others[uid] = int(msg.Pos)
+	log.Debug("JoinTableMsg:%v", msg)
 }
 
 func HandlerOperatMsg(args []interface{}) {
-	req := args[0].(*proto.OperatReq)
-	rsp := proto.NewOperatRsp()
+	msg := args[0].(*proto.OperatMsg)
 	a := args[1].(*agent)
+	log.Release("uid:%v, pos:%v, %v", a.uid, others[msg.Uid], msg.Info())
+}
+
+func HandlerOperatReq(args []interface{}) {
+	req := args[0].(*proto.OperatReq)
+	a := args[1].(*agent)
+	rsp := proto.NewOperatRsp()
 	if req.Type&proto.OperatType_DealOperat != 0 {
 		a.turn++
 		rsp.Type = proto.OperatType_DealOperat
@@ -130,7 +155,7 @@ func HandlerOperatMsg(args []interface{}) {
 	a.WriteMsg(rsp)
 }
 
-func (a *agent) Run() {
+func (a *agent) Start() {
 	if a.Login() != nil {
 		return
 	}
@@ -139,39 +164,48 @@ func (a *agent) Run() {
 		if err != nil {
 			return
 		}
-		tid_chan <- table_id
-		tid_chan <- table_id
-		tid_chan <- table_id
+		tidChan <- table_id
+		tidChan <- table_id
+		tidChan <- table_id
 	} else {
-		table_id := <-tid_chan
+		table_id := <-tidChan
 		err := a.JoinTable(table_id)
 		if err != nil {
 			return
 		}
 	}
+}
+
+func (a *agent) Run() {
+	go a.Start()
 	for {
 		if a.turn > 100 {
 			break
 		}
-		msg, err := a.ReadMsg()
+		_, err := a.ReadMsg()
+		//log.Debug("readMsg:%v", msg)
 		if err != nil {
 			log.Error("read message:%v", err)
 			break
 		}
 
-		err = a.Processor.Route(msg, a)
-		if err != nil {
-			log.Debug("route message error: %v", err)
-			break
-		}
+		//err = a.Processor.Route(msg, a)
+		//if err != nil {
+		//	log.Debug("route message error: %v", err)
+		//	break
+		//}
 	}
 	if a.master {
 		c <- os.Signal(os.Interrupt)
 	}
+	log.Release("uid:%v run exit", a.uid)
 }
 
 func (a *agent) Hu(req *proto.HuReq, rsp *proto.HuRsp) bool {
 	rsp.Ok = true
+	rsp.Card = req.Card
+	rsp.Type = req.Type
+	rsp.Lose = req.Lose
 	return true
 }
 
@@ -239,13 +273,9 @@ func (a *agent) Eat(req *proto.EatReq, rsp *proto.EatRsp) bool {
 }
 
 func (a *agent) Pong(req *proto.PongReq, rsp *proto.PongRsp) bool {
-	count, card := req.Count, req.Card
-	if count == 2 {
-		a.cards = a.DelCard(card, card, 0)
-	} else if count == 3 {
-		a.cards = a.DelCard(card, card, card)
-	}
-	rsp.Card, rsp.Count = card, count
+	card := req.Card
+	a.cards = a.DelCard(card, card, 0)
+	rsp.Card, rsp.Ok = card, true
 	return true
 }
 
@@ -279,9 +309,9 @@ func (a *agent) ReadMsg() (interface{}, error) {
 			log.Debug("Unmarshal data:%v", err)
 			return nil, err
 		}
-		//if err = a.Processor.Route(msg, a); err != nil {
-		//	log.Error("Route msg:%v err:%v", reflect.TypeOf(msg), err)
-		//}
+		if err = a.Processor.Route(msg, a); err != nil {
+			log.Error("Route msg:%v err:%v", reflect.TypeOf(msg), err)
+		}
 		return msg, nil
 	}
 	return nil, errors.New("processor is nil")
@@ -327,7 +357,7 @@ func main() {
 	}
 
 	table_start := 10000
-	for i := 0; i < 1; i++ {
+	for i := 0; i < PlayerNum; i++ {
 		uid := uint64(table_start)
 		is_master := false
 		if table_start == 10000 {
@@ -342,10 +372,17 @@ func main() {
 		client.LenMsgLen = 2
 		client.MaxMsgLen = math.MaxUint32
 		client.NewAgent = func(conn *network.TCPConn) network.Agent {
-			proto.Processor.SetHandler(&proto.UserJoinTableMsg{}, HandlerBroadCastMsg)
-			proto.Processor.SetHandler(&proto.OperatReq{}, HandlerOperatMsg)
+			proto.Processor.SetHandler(&proto.LoginRsp{}, HandlerLoginRsp)
+			proto.Processor.SetHandler(&proto.CreateTableRsp{}, HandlerCreateTableRsp)
+			proto.Processor.SetHandler(&proto.JoinTableRsp{}, HandlerJoinTableRsp)
+			proto.Processor.SetHandler(&proto.UserJoinTableMsg{}, HandlerJoinTableMsg)
+			proto.Processor.SetHandler(&proto.OperatReq{}, HandlerOperatReq)
+			proto.Processor.SetHandler(&proto.OperatMsg{}, HandlerOperatMsg)
 			r := rand.New(rand.NewSource(time.Now().UnixNano()))
 			a := &agent{uid: uid, conn: conn, Processor: proto.Processor, master: is_master, rand: r}
+			a.loginChan = make(chan interface{})
+			a.joinTableChan = make(chan interface{})
+			a.createTableChan = make(chan interface{})
 			a.turn = 0
 			return a
 		}

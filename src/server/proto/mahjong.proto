@@ -49,7 +49,8 @@ enum OperatType {
    HuOperat = 0x04;
    EatOperat = 0x08;
    PongOperat = 0x10;
-   DropOperat = 0x20;
+   GangOperat = 0x20;
+   DropOperat = 0x40;
 }
 
 message OperatReq
@@ -60,7 +61,8 @@ message OperatReq
     HuReq huReq = 4;
     EatReq eatReq = 5;
     PongReq pongReq = 6;
-    DropReq dropReq = 7;
+    GangReq gangReq = 7;
+    DropReq dropReq = 8;
 }
 
 message OperatRsp
@@ -73,7 +75,8 @@ message OperatRsp
     HuRsp huRsp = 6;
     EatRsp eatRsp = 7;
     PongRsp pongRsp = 8;
-    DropRsp dropRsp = 9;
+    GangRsp gangRsp = 9;
+    DropRsp dropRsp = 10;
 }
 
 message DealReq
@@ -99,14 +102,26 @@ message DrawRsp
 
 }
 
+enum HuType {
+    Nomal = 0;
+    Mo    = 1;
+    GangHua = 2;
+    QiangGang = 3;
+}
+
 message HuReq
 {
     int32 card = 1;
+    HuType type = 2;
+    uint64 lose = 3;
 }
 
 message HuRsp
 {
     bool ok = 1;
+    int32 card = 2;
+    HuType type = 3;
+    uint64 lose = 4;
 }
 
 message Eat
@@ -127,26 +142,38 @@ message EatRsp
 
 message PongReq
 {
-    enum GangType {
-        MingGang = 0;
-        BuGang = 1;
-        AnGang = 2;
-    }
     int32 card = 1;
-    int32 count = 2;
-    GangType type = 3;
-
 }
 
 message PongRsp
 {
-    int32 count = 1;
+    bool ok = 1;
     int32 card = 2;
+}
+
+enum GangType {
+    MingGang = 0;
+    BuGang = 1;
+    AnGang = 2;
+}
+
+message Gang {
+    int32 card = 1;
+    GangType type = 2;
+}
+
+message GangReq {
+    repeated Gang gang = 1;
+}
+
+message GangRsp {
+    bool ok = 1;
+    Gang gang = 2;
 }
 
 message DropReq
 {
-
+    int32 card = 2;
 }
 
 message DropRsp
@@ -166,10 +193,12 @@ message OperatMsg
 {
     uint64 uid = 1;
     OperatType type = 2;
-    HuRsp hu = 3;
-    EatRsp eat = 4;
-    PongRsp pong = 5;
-    DropRsp drop = 6;
+    DealRsp deal = 3;
+    DrawRsp draw = 4;
+    HuRsp hu = 5;
+    EatRsp eat = 6;
+    PongRsp pong = 7;
+    DropRsp drop = 8;
 }
 
 service MahjongService {

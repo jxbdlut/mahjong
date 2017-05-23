@@ -45,6 +45,9 @@ func (a *BaseRobot)HandlerOperatMsg(req *proto.OperatReq) (*proto.OperatRsp, err
 
 func (a *BaseRobot)Hu(req *proto.HuReq, rsp *proto.HuRsp) bool {
 	rsp.Ok = true
+	rsp.Card = req.Card
+	rsp.Type = req.Type
+	rsp.Lose = req.Lose
 	return true
 }
 
@@ -73,7 +76,7 @@ func (a *BaseRobot)Eat(req *proto.EatReq, rsp *proto.EatRsp) bool {
 }
 
 func (a *BaseRobot)Pong(req *proto.PongReq, rsp *proto.PongRsp) bool {
-	rsp.Card, rsp.Count = req.Card, req.Count
+	rsp.Card, rsp.Ok = req.Card, true
 	return true
 }
 

@@ -5,9 +5,9 @@ import (
 
 	"github.com/name5566/leaf/gate"
 	"github.com/name5566/leaf/log"
+	"net"
 	"server/proto"
 	"server/userdata"
-	"net"
 )
 
 const (
@@ -39,7 +39,7 @@ func handler(m interface{}, h interface{}) {
 }
 
 func checkLogin(a gate.Agent) bool {
-	if 	a.UserData() == nil || 0 == a.UserData().(*userdata.UserData).Uid {
+	if a.UserData() == nil || 0 == a.UserData().(*userdata.UserData).Uid {
 		return false
 	} else {
 		return true
@@ -66,11 +66,16 @@ func handlerCreateTable(args []interface{}) {
 	})
 	table.AddAgent(a, true)
 	if proto.CreateTableReq_TableType(req.Type) == proto.CreateTableReq_TableRobot {
-		for i := 0; i < 3; i++ {
+		for i := 1; i < 4; i++ {
 			rid := genRobotUid()
 			agent := NewAgent(rid)
 			robots[rid] = &agent
 			table.AddAgent(agent, false)
+			table.Broadcast(&proto.UserJoinTableMsg{
+				Uid: rid,
+				Tid: tid,
+				Pos: int32(i + 1),
+			})
 		}
 	}
 	go table.Run()
@@ -78,7 +83,7 @@ func handlerCreateTable(args []interface{}) {
 	log.Debug("uid:%v, create table", uid)
 	a.WriteMsg(&proto.CreateTableRsp{
 		ErrCode: 0,
-		ErrMsg:  "successed!",
+		ErrMsg:  "CreateTable success!",
 		TableId: tid,
 	})
 }
@@ -102,17 +107,23 @@ func handlerJoinTable(args []interface{}) {
 			rsp.ErrCode = 10000
 			rsp.ErrMsg = "you areadly in table"
 		} else {
+
 			a.SetUserData(&userdata.UserData{
 				Uid: uid,
 				Tid: tid,
 			})
-			tables[tid].AddAgent(a, false)
-			rsp.ErrCode = 0
-			rsp.ErrMsg = "join successed!"
-			table.BroadcastExceptMe(&proto.UserJoinTableMsg{
-				Uid: uid,
-				Tid: tid,
-			}, uid)
+			if pos, err := tables[tid].AddAgent(a, false); err != nil {
+				rsp.ErrCode = 0
+				rsp.ErrMsg = "join success!"
+				table.BroadcastExceptMe(&proto.UserJoinTableMsg{
+					Uid: uid,
+					Tid: tid,
+					Pos: int32(pos),
+				}, uid)
+			} else {
+				rsp.ErrCode = -1
+				rsp.ErrMsg = err.Error()
+			}
 		}
 	} else {
 		log.Error("table is not exist, tid:%v", tid)
@@ -161,7 +172,7 @@ func genRobotUid() uint64 {
 }
 
 type agent struct {
-	userData        interface{}
+	userData interface{}
 }
 
 func NewAgent(uid uint64) gate.Agent {
@@ -173,7 +184,7 @@ func NewAgent(uid uint64) gate.Agent {
 }
 
 func (a *agent) WriteMsg(msg interface{}) {
-	log.Debug("uid:%v writemsg", a.UserData().(*userdata.UserData).Uid)
+	//log.Debug("uid:%v writemsg", a.UserData().(*userdata.UserData).Uid)
 }
 
 func (a *agent) UserData() interface{} {

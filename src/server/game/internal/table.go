@@ -6,9 +6,9 @@ import (
 	"github.com/name5566/leaf/log"
 	"math/rand"
 	"server/mahjong"
+	"server/proto"
 	"server/userdata"
 	"time"
-	"server/proto"
 )
 
 type Table struct {
@@ -75,7 +75,7 @@ func (t *Table) GetPlayer(uid uint64) (*Player, error) {
 	return nil, errors.New("not in table")
 }
 
-func (t *Table) AddAgent(agent gate.Agent, master bool) error {
+func (t *Table) AddAgent(agent gate.Agent, master bool) (int, error) {
 	if len(t.players) < 4 {
 		uid := agent.UserData().(*userdata.UserData).Uid
 		player := NewPlayer(agent, uid)
@@ -84,9 +84,9 @@ func (t *Table) AddAgent(agent gate.Agent, master bool) error {
 		player.SetOnline(true)
 		MapUidPlayer[uid] = player
 		t.players = append(t.players, player)
-		return nil
+		return len(t.players) - 1, nil
 	} else {
-		return errors.New("this table is full!")
+		return 0, errors.New("this table is full!")
 	}
 }
 
@@ -187,7 +187,7 @@ func (t *Table) DropRecord(p *Player, dis_card int32) {
 	t.drop_record[p] = append(t.drop_record[p], dis_card)
 }
 
-func (t *Table) DisCard(p *Player, dis_card int32) {
+func (t *Table) DisCard(p *Player, dis_card int32, huType proto.HuType) {
 	t.DropRecord(p, dis_card)
 	next_pos, err := t.GetPlayerIndex(p.uid)
 	if err != nil {
@@ -196,23 +196,25 @@ func (t *Table) DisCard(p *Player, dis_card int32) {
 	}
 	for i := 0; i < len(t.players); i++ {
 		player := t.players[(next_pos+i)%len(t.players)]
-		if player.CheckHu(dis_card, false) {
-			player.Hu(dis_card, false)
+		if player.CheckHu(dis_card, huType) {
 			t.win_player = player
 			return
 		}
 	}
 
-	for i := 0; i < len(t.players); i++ {
+	for i := 1; i < len(t.players); i++ {
 		player := t.players[(t.play_turn+i)%len(t.players)]
-		if dis_card, count := player.CheckPong(dis_card); count > 0 {
+		if dis_card, count := player.CheckGangOrPong(dis_card); count > 0 {
 			pos, err := t.GetPlayerIndex(player.uid)
 			if err != nil {
 				log.Error("GetPlayerIndex err:", err)
 				return
 			}
 			t.play_turn = (pos + 1) % len(t.players)
-			t.DisCard(player, dis_card)
+			if count > 2 {
+				huType = proto.HuType_QiangGang
+			}
+			t.DisCard(player, dis_card, huType)
 			return
 		}
 	}
@@ -220,7 +222,7 @@ func (t *Table) DisCard(p *Player, dis_card int32) {
 	player := t.players[t.play_turn]
 	if dis_card, ok := player.CheckEat(dis_card); ok {
 		t.play_turn = (t.play_turn + 1) % len(t.players)
-		t.DisCard(player, dis_card)
+		t.DisCard(player, dis_card, proto.HuType_Nomal)
 		return
 	}
 }
@@ -604,8 +606,7 @@ func (t *Table) GetTingCards(p *Player) map[int32]interface{} {
 func (t *Table) GetOnlineNum() int {
 	num := 0
 	for _, player := range t.players {
-		log.Debug("uid:%v online:%v", player.uid, player.online)
-		if player.online && !player.isRobot{
+		if player.online && !player.isRobot {
 			num++
 		}
 	}
@@ -621,7 +622,7 @@ func (t *Table) Play() {
 		t.play_turn = (t.play_turn + 1) % len(t.players)
 		discard := player.Draw(false)
 		if discard != 0 {
-			t.DisCard(player, discard)
+			t.DisCard(player, discard, proto.HuType_Nomal)
 			t.round += 1
 		} else {
 			t.win_player = player

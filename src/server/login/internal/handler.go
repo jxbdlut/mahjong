@@ -3,15 +3,14 @@ package internal
 import (
 	"crypto/md5"
 	"encoding/hex"
-	"reflect"
-	"strconv"
-	"strings"
-
 	"github.com/name5566/leaf/gate"
 	"github.com/name5566/leaf/log"
-	"server/proto"
+	"reflect"
 	"server/game"
+	"server/proto"
 	"server/userdata"
+	"strconv"
+	"strings"
 )
 
 func handleMsg(m interface{}, h interface{}) {
@@ -30,8 +29,8 @@ func handleLogin(args []interface{}) {
 	md5Ctx := md5.New()
 	md5Ctx.Write([]byte(strconv.FormatUint(req.Uid, 10)))
 	cipherStr := md5Ctx.Sum(nil)
-	passwd := hex.EncodeToString(cipherStr)
-	if strings.Compare(passwd, req.Passwd) == 0 {
+	password := hex.EncodeToString(cipherStr)
+	if strings.Compare(password, req.Passwd) == 0 {
 		a.SetUserData(&userdata.UserData{
 			Uid:  req.Uid,
 		})
@@ -41,12 +40,12 @@ func handleLogin(args []interface{}) {
 		}
 		a.WriteMsg(&proto.LoginRsp{
 			ErrCode: 0,
-			ErrMsg:  "successed",
+			ErrMsg:  "login success",
 		})
 	} else {
 		a.WriteMsg(&proto.LoginRsp{
 			ErrCode: -1,
-			ErrMsg:  "account or passwd error!",
+			ErrMsg:  "account or password error!",
 		})
 	}
 
