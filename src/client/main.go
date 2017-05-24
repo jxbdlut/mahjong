@@ -182,7 +182,7 @@ func (a *agent) Start() {
 func (a *agent) Run() {
 	go a.Start()
 	for {
-		if a.turn > 1000 {
+		if a.turn > 10000 {
 			break
 		}
 		_, err := a.ReadMsg()
@@ -346,7 +346,8 @@ func (a *agent) SetUserData(data interface{}) {
 
 func main() {
 	lconf.LogLevel = conf.Server.LogLevel
-	lconf.LogPath = conf.Server.LogPath
+	//lconf.LogPath = conf.Server.LogPath
+	lconf.LogPath = "./log/"
 	lconf.LogFlag = conf.LogFlag
 	lconf.ConsolePort = conf.Server.ConsolePort
 	lconf.ProfilePath = conf.Server.ProfilePath

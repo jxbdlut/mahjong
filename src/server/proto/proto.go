@@ -10,6 +10,8 @@ import (
 var (
 	Processor = protobuf.NewProcessor()
 	GangTypeMap = map[GangType]string{GangType_MingGang: "明杠", GangType_BuGang: "补杠", GangType_AnGang: "暗杠"}
+	HuTypeMap = map[HuType]string{HuType_Nomal: "平胡", HuType_Mo: "自摸", HuType_GangHua: "杠上花", HuType_QiangGang: "抢杠", HuType_HaiDiLao: "海底捞"}
+	WaveTypeMap = map[Wave_WaveType]string{Wave_EatWave:"吃", Wave_PongWave:"碰", Wave_GangWave:"杠"}
 )
 
 func init() {
@@ -36,6 +38,21 @@ func GangTypeStr(gangType GangType) string {
 	return GangTypeMap[gangType]
 }
 
+func HuTypeStr(huType HuType) string {
+	return HuTypeMap[huType]
+}
+
+func WaveStr(wave Wave_WaveType) string {
+	return WaveTypeMap[wave]
+}
+
+func WavesStr(waves []Wave) string {
+	var str_cards []string
+	for _, wave := range waves {
+		str_cards = append(str_cards, wave.Info())
+	}
+	return "[" + strings.Join(str_cards, ",") + "]"
+}
 func (m *Eat) Equal(eat *Eat) bool {
 	if len(m.HandCard) != len(eat.HandCard) || len(m.WaveCard) != len(eat.WaveCard) {
 		return false
@@ -59,6 +76,21 @@ func (m *Gang) Equal(gang *Gang) bool {
 	}
 	if m.Card != gang.Card {
 		return false
+	}
+	return true
+}
+
+func (m *Wave) Equal(wave *Wave) bool {
+	if m.Type != wave.Type {
+		return false
+	}
+	if len(m.Cards) != len(wave.Cards) {
+		return false
+	}
+	for i, card := range m.Cards {
+		if card != wave.Cards[i] {
+			return false
+		}
 	}
 	return true
 }
@@ -163,11 +195,11 @@ func (m *DrawRsp) Info() string {
 
 func (m *HuReq) Info() string {
 	return "[" + mahjong.CardStr(m.Card) + "]"
-	return "[" + fmt.Sprintf("card:%v, type:%v, loser:%v", mahjong.CardStr(m.Card), m.Type, m.Lose) + "]"
+	return "[" + fmt.Sprintf("card:%v, type:%v, loser:%v", mahjong.CardStr(m.Card), HuTypeStr(m.Type), m.Lose) + "]"
 }
 
 func (m *HuRsp) Info() string {
-	return "[" + fmt.Sprintf("%v, card:%v, type:%v, loser:%v", m.Ok, mahjong.CardStr(m.Card), m.Type, m.Lose) + "]"
+	return "[" + fmt.Sprintf("%v, card:%v, type:%v, loser:%v", m.Ok, mahjong.CardStr(m.Card), HuTypeStr(m.Type), m.Lose) + "]"
 }
 
 func (m *Eat) Info() string {
@@ -268,4 +300,8 @@ func (m *OperatMsg) Info() string {
 		return "rsp type err"
 	}
 	return str + strings.Join(result, ",")
+}
+
+func (m *Wave) Info() string {
+	return fmt.Sprintf("%v", mahjong.CardsStr(m.Cards))
 }

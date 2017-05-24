@@ -15,10 +15,10 @@ import (
 type Player struct {
 	agent           gate.Agent
 	uid             uint64
-	Name            string
+	name            string
 	cards           []int32
 	separate_result [5][]int32
-	pong_cards      []int32
+	waves           []proto.Wave
 	prewin_cards    map[int32]interface{}
 	win_card        int32
 	master          bool
@@ -61,7 +61,7 @@ func (p *Player) String() string {
 			return p.cards[i] < p.cards[j]
 		}
 	})
-	str := fmt.Sprintf("uid:%v, %v/[%v]", p.uid, mahjong.CardsStr(p.cards), mahjong.CardStr(p.table.hun_card))
+	str := fmt.Sprintf("uid:%v, %v/%v/[%v]", p.uid, mahjong.CardsStr(p.cards), proto.WavesStr(p.waves), mahjong.CardStr(p.table.hun_card))
 	if len(p.prewin_cards) > 0 {
 		keys := []int32{}
 		for key := range p.prewin_cards {
@@ -79,8 +79,8 @@ func (p *Player) String() string {
 }
 
 func (p *Player) Clear() {
-	p.cards = append(p.cards[:0], p.cards[:0]...)
-	p.pong_cards = append(p.pong_cards[:0], p.pong_cards[:0]...)
+	p.cards = append(p.cards[:0])
+	p.waves = append(p.waves[:0])
 	p.prewin_cards = make(map[int32]interface{})
 	p.win_card = 0
 	p.separate_result = [5][]int32{}
@@ -92,10 +92,25 @@ func (p *Player) FeedCard(cards []int32) {
 	p.separate_result = mahjong.SeparateCards(p.cards, p.table.hun_card)
 }
 
-func (p *Player) AddPongCards(cards []int32) {
-	for _, card := range cards {
-		p.pong_cards = append(p.pong_cards, card)
+func (p *Player) AddGangWave(cards []int32, t proto.GangType) {
+	if t == proto.GangType_BuGang {
+		for _, wave := range p.waves {
+			if wave.Cards[0] == cards[0] {
+				wave.Cards = append(wave.Cards, cards[0])
+				return
+			}
+		}
+	} else {
+		p.waves = append(p.waves, proto.Wave{Cards: cards, Type: proto.Wave_GangWave})
 	}
+}
+
+func (p *Player) AddPongWave(card int32) {
+	p.waves = append(p.waves, proto.Wave{Cards:[]int32{card, card, card}, Type:proto.Wave_PongWave})
+}
+
+func (p *Player) AddEatWave(cards []int32) {
+	p.waves = append(p.waves, proto.Wave{Cards:cards, Type:proto.Wave_EatWave})
 }
 
 func (p *Player) GetCardIndex(card int32) (int, error) {
@@ -158,49 +173,57 @@ func (p *Player) Deal() {
 }
 
 // card为零的情况是吃或者碰之后出错，要随机出一张牌
-func (p *Player) Drop(card int32) int32 {
-	discard := card
-	if discard == 0 {
-		discard = p.cards[len(p.cards)-1]
-	}
+func (p *Player) Drop(disCard DisCard) DisCard {
+
 	req := proto.NewOperatReq()
 	req.Type = proto.OperatType_DropOperat
 	p.CanAnGang(req)
-	p.CanHu(card, req)
+	p.CanHu(disCard, req)
+	if disCard.card == 0 {
+		disCard.fromUid = p.uid
+		disCard.disType = DisCard_Normal
+		disCard.card = p.cards[len(p.cards)-1]
+	}
 	rsp, err := p.Notify(req)
 	if err != nil {
 		log.Error("uid:%v Drop err:%v", p.uid, err)
-		return card
+		return disCard
 	}
 	log.Release("uid:%v, %v, %v", p.uid, req.Info(), rsp.(*proto.OperatRsp).Info())
 	if err != nil {
 		log.Error("uid:%v Draw err:%v", p.uid, err)
-		return card
+		return disCard
 	}
 	result, err := p.ValidRsp(req, rsp.(*proto.OperatRsp))
 	if err != nil {
-		return card
+		return disCard
 	}
 	p.BoardCastMsg(rsp.(*proto.OperatRsp))
 	switch rsp.(*proto.OperatRsp).Type {
 	case proto.OperatType_HuOperat:
 		p.Hu(result.(*proto.HuRsp))
-		return 0
+		disCard.card = 0
 	case proto.OperatType_GangOperat:
 		p.Gang(result.(*proto.GangRsp).Gang.Card, result.(*proto.GangRsp).Gang.Type)
-		return p.Draw(true)
+		if result.(*proto.GangRsp).Gang.Type == proto.GangType_BuGang {
+			disCard.card = result.(*proto.GangRsp).Gang.Card
+			disCard.disType = DisCard_BuGang
+			disCard.fromUid = p.uid
+			return disCard
+		}
+		return p.Draw(DisCard_SelfGang)
 	case proto.OperatType_DropOperat:
-		discard = result.(*proto.DropRsp).DisCard
-		p.DelCard(discard)
-		return discard
+		disCard.card = result.(*proto.DropRsp).DisCard
+		p.DelCard(disCard.card)
 	}
-	return discard
+	return disCard
 }
 
-func (p *Player) Draw(gang_flag bool) int32 {
+func (p *Player) Draw(cardType DisCardType) DisCard {
 	card := p.table.DrawCard()
 	p.FeedCard([]int32{card})
 
+	disCard := DisCard{card:card, fromUid:p.uid, disType:cardType}
 	req := proto.NewOperatReq()
 	req.Type = proto.OperatType_DrawOperat
 	req.DrawReq.Card = card
@@ -208,20 +231,20 @@ func (p *Player) Draw(gang_flag bool) int32 {
 	rsp, err := p.Notify(req)
 	if err != nil {
 		log.Error("uid:%v Draw err:%v", p.uid, err)
-		return card
+		return disCard
 	}
 	log.Release("uid:%v, %v, %v", p.uid, req.Info(), rsp.(*proto.OperatRsp).Info())
 	log.Release("%v", p)
 	result, err := p.ValidRsp(req, rsp.(*proto.OperatRsp))
 	_ = result
 	if err != nil {
-		return card
+		return disCard
 	}
 	switch rsp.(*proto.OperatRsp).Type {
 	case proto.OperatType_DrawOperat:
-		return p.Drop(card)
+		return p.Drop(disCard)
 	}
-	return card
+	return disCard
 }
 
 func (p *Player) HandlerOperatRsp(msg interface{}) {
@@ -284,6 +307,7 @@ func (p *Player) Notify(req *proto.OperatReq) (interface{}, error) {
 
 func (p *Player) Hu(huRsp *proto.HuRsp) {
 	p.win_card = huRsp.Card
+	p.table.win_player = p
 	log.Release("%v", p)
 	log.Release("uid:%v, %v", p.uid, huRsp.Info())
 	return
@@ -304,17 +328,17 @@ func (p *Player) Gang(card int32, gangType proto.GangType) {
 		delCards = []int32{card, card, card, card}
 	}
 	p.DelCards(delCards)
-	p.AddPongCards(cards)
+	p.AddGangWave(cards, gangType)
 }
 
 func (p *Player) Pong(card int32) {
 	cards := []int32{card, card}
 	p.DelCards(cards)
-	p.AddPongCards(cards)
+	p.AddPongWave(card)
 }
 
 func (p *Player) Eat(eat *proto.Eat) {
-	p.AddPongCards(eat.WaveCard)
+	p.AddEatWave(eat.WaveCard)
 	p.DelCards(eat.HandCard)
 }
 
@@ -368,23 +392,45 @@ func (p *Player) ValidRsp(req *proto.OperatReq, rsp *proto.OperatRsp) (interface
 	return nil, errors.New("rsp error")
 }
 
-func (p *Player) CanHu(card int32, req *proto.OperatReq) bool {
-	_, ok := p.prewin_cards[card]
-	if (card == p.table.hun_card && len(p.prewin_cards) > 0) || ok {
+func (p *Player) CanHu(disCard DisCard, req *proto.OperatReq) bool {
+	card := disCard.card
+	hu := false
+	if _, ok := p.prewin_cards[card]; ok {
+		hu = true
+	}
+	if _, ok := p.prewin_cards[1]; ok {
+		hu = true
+	}
+	if _, ok := p.prewin_cards[2]; ok {
+		hu = true
+	}
+	if (card == p.table.hun_card && len(p.prewin_cards) > 0) || hu {
 		req.Type = req.Type | proto.OperatType_HuOperat
 		req.HuReq.Card = card
+		if disCard.fromUid == p.uid {
+			req.HuReq.Type = proto.HuType_Mo
+			if disCard.disType == DisCard_SelfGang {
+				req.HuReq.Type = proto.HuType_GangHua
+			}
+			if disCard.disType == DisCard_HaiDi {
+				req.HuReq.Type = proto.HuType_HaiDiLao
+			}
+		} else {
+			req.HuReq.Lose = disCard.fromUid
+			if disCard.disType == DisCard_BuGang {
+				req.HuReq.Type = proto.HuType_QiangGang
+			}
+		}
 		return true
 	}
 	return false
 }
 
-func (p *Player) CheckHu(card int32, t proto.HuType) bool {
+func (p *Player) CheckHu(disCard DisCard) bool {
 	req := proto.NewOperatReq()
-	if p.CanHu(card, req) {
-		if t == proto.HuType_GangHua || t == proto.HuType_Mo {
-			p.CanPong(card, req)
-			p.CanEat(card, req)
-		}
+	if p.CanHu(disCard, req) {
+		p.CanPong(disCard, req)
+		p.CanEat(disCard, req)
 		rsp, err := p.Notify(req)
 		if err != nil {
 			log.Debug("uid:%v, Hu err:%v", p.uid, err)
@@ -455,15 +501,18 @@ func (p *Player) ValidGang(req *proto.GangReq, rsp *proto.GangRsp) bool {
 	return true
 }
 
-func (p *Player) CanEat(card int32, req *proto.OperatReq) bool {
+func (p *Player) CanEat(disCard DisCard, req *proto.OperatReq) bool {
 	var eats []*proto.Eat
+	card := disCard.card
 	m := card / 100
-	if m == 4 || card == p.table.hun_card {
+	if m == 4 || disCard.card == p.table.hun_card {
 		return false
 	}
-	if p.table.players[p.table.play_turn].uid != p.uid {
-		return false
-	}
+
+	//if disCard.fromUid != p.uid {
+	//	return false
+	//}
+
 	c_1 := mahjong.Count(p.cards, card-1)
 	c_2 := mahjong.Count(p.cards, card-2)
 	c1 := mahjong.Count(p.cards, card+1)
@@ -495,25 +544,25 @@ func (p *Player) CanEat(card int32, req *proto.OperatReq) bool {
 	return false
 }
 
-func (p *Player) CheckEat(card int32) (int32, bool) {
+func (p *Player) CheckEat(disCard DisCard) (DisCard, bool) {
 	req := proto.NewOperatReq()
-	if p.CanEat(card, req) {
+	if p.CanEat(disCard, req) {
 		rsp, err := p.Notify(req)
 		if err != nil {
 			log.Debug("uid:%v, Eat err:%v", p.uid, err)
-			return 0, false
+			return disCard, false
 		}
 		result, err := p.ValidRsp(req, rsp.(*proto.OperatRsp))
 		if err != nil {
-			return 0, false
+			return disCard, false
 		}
 		log.Release("uid:%v, %v, %v", p.uid, req.Info(), rsp.(*proto.OperatRsp).Info())
 		p.Eat(result.(*proto.EatRsp).Eat)
 		p.BoardCastMsg(rsp.(*proto.OperatRsp))
 		log.Release("%v", p)
-		return p.Drop(0), true
+		return p.Drop(DisCard{card:0}), true
 	} else {
-		return 0, false
+		return disCard, false
 	}
 }
 
@@ -546,7 +595,22 @@ func (p *Player) CanAnGang(req *proto.OperatReq) bool {
 }
 
 func (p *Player) CanBuGang(req *proto.OperatReq) bool {
-	return false
+	ret := false
+	for _, wave := range p.waves {
+		if wave.Type != proto.Wave_PongWave {
+			continue
+		}
+		if mahjong.Count(p.cards, wave.Cards[0]) > 0 {
+			req.Type = req.Type | proto.OperatType_GangOperat
+			gang := &proto.Gang{
+				Card: wave.Cards[0],
+				Type: proto.GangType_AnGang,
+			}
+			req.GangReq.Gang = append(req.GangReq.Gang, gang)
+			ret = true
+		}
+	}
+	return ret
 }
 
 func (p *Player) CanMingGang(card int32, req *proto.OperatReq) bool {
@@ -563,8 +627,9 @@ func (p *Player) CanMingGang(card int32, req *proto.OperatReq) bool {
 	return false
 }
 
-func (p *Player) CanGang(card int32, req *proto.OperatReq) bool {
-	if card == 0 {
+func (p *Player) CanGang(disCard DisCard, req *proto.OperatReq) bool {
+	card := disCard.card
+	if disCard.fromUid == p.uid {
 		p.CanAnGang(req)
 		p.CanBuGang(req)
 	} else {
@@ -573,7 +638,11 @@ func (p *Player) CanGang(card int32, req *proto.OperatReq) bool {
 	return false
 }
 
-func (p *Player) CanPong(card int32, req *proto.OperatReq) bool {
+func (p *Player) CanPong(disCard DisCard, req *proto.OperatReq) bool {
+	if disCard.fromUid == p.uid {
+		return false
+	}
+	card := disCard.card
 	count := mahjong.Count(p.cards, card)
 	if count > 1 {
 		req.Type = req.Type | proto.OperatType_PongOperat
@@ -583,39 +652,39 @@ func (p *Player) CanPong(card int32, req *proto.OperatReq) bool {
 	return false
 }
 
-func (p *Player) CanGangOrPong(card int32, req *proto.OperatReq) bool {
-	ret := p.CanGang(card, req)
-	ret = p.CanPong(card, req)
+func (p *Player) CanGangOrPong(disCard DisCard, req *proto.OperatReq) bool {
+	ret := p.CanGang(disCard, req)
+	ret = p.CanPong(disCard, req)
 	return ret
 }
 
-func (p *Player) CheckGangOrPong(card int32) (int32, bool) {
+func (p *Player) CheckGangOrPong(disCard DisCard) (DisCard, bool) {
 	req := proto.NewOperatReq()
-	if p.CanGangOrPong(card, req) {
-		p.CanEat(card, req)
+	if p.CanGangOrPong(disCard, req) {
+		p.CanEat(disCard, req)
 		rsp, err := p.Notify(req)
 		if err != nil {
 			log.Debug("uid:%v, Pong err:%v", p.uid, err)
-			return 0, false
+			return disCard, false
 		}
 		log.Debug("uid:%v, %v, %v", p.uid, req.Info(), rsp.(*proto.OperatRsp).Info())
 		result, err := p.ValidRsp(req, rsp.(*proto.OperatRsp))
 		if err != nil {
 			log.Error("uid:%v, rsp err:%v", p.uid, err)
-			return 0, false
+			return disCard, false
 		}
 		p.BoardCastMsg(rsp.(*proto.OperatRsp))
 
 		switch rsp.(*proto.OperatRsp).Type {
 		case proto.OperatType_PongOperat:
 			p.Pong(result.(*proto.PongRsp).Card)
-			return p.Drop(0), true
+			return p.Drop(DisCard{card:0}), true
 		case proto.OperatType_GangOperat:
 			p.Gang(result.(*proto.GangRsp).Gang.Card, result.(*proto.GangRsp).Gang.Type)
-			return p.Draw(true), true
+			return p.Draw(DisCard_SelfGang), true
 		}
 	}
-	return 0, false
+	return disCard, false
 }
 
 func (p *Player) SetMaster(master bool) {

@@ -107,6 +107,7 @@ enum HuType {
     Mo    = 1;
     GangHua = 2;
     QiangGang = 3;
+    HaiDiLao  = 4;
 }
 
 message HuReq
@@ -171,7 +172,6 @@ message GangRsp {
     Gang gang = 2;
 }
 
-
 message DropReq
 {
     int32 card = 2;
@@ -188,6 +188,17 @@ message UserJoinTableMsg
     uint64 uid = 2;
     string name = 3;
     int32 pos = 4;
+}
+
+message Wave
+{
+    enum WaveType {
+        EatWave = 0;
+        PongWave = 1;
+        GangWave = 2;
+    }
+    repeated int32 cards = 1;
+    WaveType type = 2;
 }
 
 message OperatMsg

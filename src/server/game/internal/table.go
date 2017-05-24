@@ -23,15 +23,23 @@ type Table struct {
 	fan_card    int32
 	hun_card    int32
 	round       int
-	drop_record map[*Player][]int32
+	drop_record map[uint64][]int32
 }
+
+const (
+	DisCard_Normal   = 0
+	DisCard_Mo       = 1
+	DisCard_BuGang   = 2
+	DisCard_HaiDi    = 3
+	DisCard_SelfGang = 4
+)
 
 type DisCardType int32
 
 type DisCard struct {
-	card int32
-	disCardType DisCardType
-	player  *Player
+	card    int32
+	disType DisCardType
+	fromUid uint64
 }
 
 func NewTable(tid uint32, tableType proto.CreateTableReq_TableType) *Table {
@@ -39,7 +47,7 @@ func NewTable(tid uint32, tableType proto.CreateTableReq_TableType) *Table {
 	t.tid = tid
 	t.tableType = tableType
 	t.play_turn = 0
-	t.drop_record = make(map[*Player][]int32)
+	t.drop_record = make(map[uint64][]int32)
 	return t
 }
 
@@ -51,7 +59,7 @@ func (t *Table) Clear() {
 	t.hun_card = 0
 	t.round = 0
 	for _, player := range t.players {
-		delete(t.drop_record, player)
+		delete(t.drop_record, player.uid)
 	}
 }
 
@@ -190,47 +198,56 @@ func (t *Table) DrawCard() int32 {
 	return card
 }
 
-func (t *Table) DropRecord(p *Player, dis_card int32) {
-	t.drop_record[p] = append(t.drop_record[p], dis_card)
+func (t *Table) DropRecord(uid uint64, dis_card int32) {
+	t.drop_record[uid] = append(t.drop_record[uid], dis_card)
 }
 
-func (t *Table) DisCard(p *Player, dis_card int32, huType proto.HuType) {
-	t.DropRecord(p, dis_card)
-	next_pos, err := t.GetPlayerIndex(p.uid)
+func (t *Table) DisCard(disCard DisCard) {
+	pos, err := t.GetPlayerIndex(disCard.fromUid)
 	if err != nil {
 		log.Error("next_pos err:%v", err)
 		return
 	}
-	for i := 0; i < len(t.players); i++ {
-		player := t.players[(next_pos+i)%len(t.players)]
-		if player.CheckHu(dis_card, huType) {
-			t.win_player = player
+
+	for i := 1; i < len(t.players); i++ {
+		player := t.players[(pos+i)%len(t.players)]
+		if player.CheckHu(disCard) {
 			return
 		}
 	}
 
+	if disCard.disType == DisCard_BuGang {
+		return
+	}
+
+	t.DropRecord(disCard.fromUid, disCard.card)
+
 	for i := 1; i < len(t.players); i++ {
 		player := t.players[(t.play_turn+i)%len(t.players)]
-		if dis_card, ok := player.CheckGangOrPong(dis_card); ok {
+
+		if dis_card, ok := player.CheckGangOrPong(disCard); ok {
 			pos, err := t.GetPlayerIndex(player.uid)
 			if err != nil {
 				log.Error("GetPlayerIndex err:", err)
 				return
 			}
 			t.play_turn = (pos + 1) % len(t.players)
-			//todo
+			//dis_card等于0的情况是杠上开花
+			if dis_card.card == 0 {
+				return
+			}
 			//if count > 2 {
 			//	huType = proto.HuType_QiangGang
 			//}
-			t.DisCard(player, dis_card, huType)
+			t.DisCard(disCard)
 			return
 		}
 	}
 
 	player := t.players[t.play_turn]
-	if dis_card, ok := player.CheckEat(dis_card); ok {
+	if disCard, ok := player.CheckEat(disCard); ok {
 		t.play_turn = (t.play_turn + 1) % len(t.players)
-		t.DisCard(player, dis_card, proto.HuType_Nomal)
+		t.DisCard(disCard)
 		return
 	}
 }
@@ -627,9 +644,13 @@ func (t *Table) Play() {
 	for len(t.left_cards) > 10 && t.win_player == nil && len(t.players) == 4 {
 		player := t.players[t.play_turn]
 		t.play_turn = (t.play_turn + 1) % len(t.players)
-		discard := player.Draw(false)
-		if discard != 0 {
-			t.DisCard(player, discard, proto.HuType_Nomal)
+		discard := player.Draw(DisCard_Mo)
+		if discard.card != 0 {
+			if discard.disType == DisCard_BuGang {
+				t.DisCard(discard)
+				discard = player.Draw(DisCard_SelfGang)
+			}
+			t.DisCard(discard)
 			t.round += 1
 		} else {
 			t.win_player = player
@@ -669,7 +690,7 @@ func (t *Table) Run() {
 			time.Sleep(1 * time.Millisecond)
 			start = time.Now().UTC()
 		}
-		time.Sleep(50 * time.Millisecond)
+		//time.Sleep(50 * time.Millisecond)
 		now := time.Now().UTC()
 		if start.Add(100 * time.Second).Before(now) {
 			log.Error("tid:%v, timeout, start:%v, now:%v", t.tid, start, now)
