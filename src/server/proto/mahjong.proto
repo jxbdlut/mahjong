@@ -13,6 +13,7 @@ message LoginRsp
 {
     int32 err_code = 1;
     string err_msg = 2;
+    bool need_recover = 3;
 }
 
 message CreateTableReq
@@ -198,7 +199,8 @@ message Wave
         GangWave = 2;
     }
     repeated int32 cards = 1;
-    WaveType type = 2;
+    WaveType wave_type = 2;
+    GangType gang_type = 3;
 }
 
 message OperatMsg

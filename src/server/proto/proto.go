@@ -81,7 +81,7 @@ func (m *Gang) Equal(gang *Gang) bool {
 }
 
 func (m *Wave) Equal(wave *Wave) bool {
-	if m.Type != wave.Type {
+	if m.GangType != wave.GangType {
 		return false
 	}
 	if len(m.Cards) != len(wave.Cards) {

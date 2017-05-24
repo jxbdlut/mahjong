@@ -97,20 +97,22 @@ func (p *Player) AddGangWave(cards []int32, t proto.GangType) {
 		for _, wave := range p.waves {
 			if wave.Cards[0] == cards[0] {
 				wave.Cards = append(wave.Cards, cards[0])
+				wave.WaveType = proto.Wave_GangWave
+				wave.GangType = proto.GangType_BuGang
 				return
 			}
 		}
 	} else {
-		p.waves = append(p.waves, proto.Wave{Cards: cards, Type: proto.Wave_GangWave})
+		p.waves = append(p.waves, proto.Wave{Cards: cards, WaveType: proto.Wave_GangWave, GangType:t})
 	}
 }
 
 func (p *Player) AddPongWave(card int32) {
-	p.waves = append(p.waves, proto.Wave{Cards:[]int32{card, card, card}, Type:proto.Wave_PongWave})
+	p.waves = append(p.waves, proto.Wave{Cards: []int32{card, card, card}, WaveType: proto.Wave_PongWave})
 }
 
 func (p *Player) AddEatWave(cards []int32) {
-	p.waves = append(p.waves, proto.Wave{Cards:cards, Type:proto.Wave_EatWave})
+	p.waves = append(p.waves, proto.Wave{Cards: cards, WaveType: proto.Wave_EatWave})
 }
 
 func (p *Player) GetCardIndex(card int32) (int, error) {
@@ -156,8 +158,8 @@ func (p *Player) Deal() {
 	req.Type = proto.OperatType_DealOperat
 	req.DealReq.Uid = p.uid
 	req.DealReq.Cards = p.cards
-	req.DealReq.FanCard = int32(p.table.fan_card)
-	req.DealReq.HunCard = int32(p.table.hun_card)
+	req.DealReq.FanCard = p.table.fan_card
+	req.DealReq.HunCard = p.table.hun_card
 	rsp, err := p.Notify(req)
 	if err != nil {
 		log.Error("uid:%v, Deal err:%v", p.uid, err)
@@ -177,7 +179,7 @@ func (p *Player) Drop(disCard DisCard) DisCard {
 
 	req := proto.NewOperatReq()
 	req.Type = proto.OperatType_DropOperat
-	p.CanAnGang(req)
+	p.CanGang(disCard, req)
 	p.CanHu(disCard, req)
 	if disCard.card == 0 {
 		disCard.fromUid = p.uid
@@ -223,7 +225,7 @@ func (p *Player) Draw(cardType DisCardType) DisCard {
 	card := p.table.DrawCard()
 	p.FeedCard([]int32{card})
 
-	disCard := DisCard{card:card, fromUid:p.uid, disType:cardType}
+	disCard := DisCard{card: card, fromUid: p.uid, disType: cardType}
 	req := proto.NewOperatReq()
 	req.Type = proto.OperatType_DrawOperat
 	req.DrawReq.Card = card
@@ -318,7 +320,7 @@ func (p *Player) Gang(card int32, gangType proto.GangType) {
 	var delCards []int32
 	switch gangType {
 	case proto.GangType_MingGang:
-		cards = []int32{card, card, card}
+		cards = []int32{card, card, card, card}
 		delCards = []int32{card, card, card}
 	case proto.GangType_BuGang:
 		cards = []int32{card}
@@ -560,7 +562,7 @@ func (p *Player) CheckEat(disCard DisCard) (DisCard, bool) {
 		p.Eat(result.(*proto.EatRsp).Eat)
 		p.BoardCastMsg(rsp.(*proto.OperatRsp))
 		log.Release("%v", p)
-		return p.Drop(DisCard{card:0}), true
+		return p.Drop(DisCard{card: 0}), true
 	} else {
 		return disCard, false
 	}
@@ -597,14 +599,14 @@ func (p *Player) CanAnGang(req *proto.OperatReq) bool {
 func (p *Player) CanBuGang(req *proto.OperatReq) bool {
 	ret := false
 	for _, wave := range p.waves {
-		if wave.Type != proto.Wave_PongWave {
+		if wave.WaveType != proto.Wave_PongWave {
 			continue
 		}
 		if mahjong.Count(p.cards, wave.Cards[0]) > 0 {
 			req.Type = req.Type | proto.OperatType_GangOperat
 			gang := &proto.Gang{
 				Card: wave.Cards[0],
-				Type: proto.GangType_AnGang,
+				Type: proto.GangType_BuGang,
 			}
 			req.GangReq.Gang = append(req.GangReq.Gang, gang)
 			ret = true
@@ -678,7 +680,7 @@ func (p *Player) CheckGangOrPong(disCard DisCard) (DisCard, bool) {
 		switch rsp.(*proto.OperatRsp).Type {
 		case proto.OperatType_PongOperat:
 			p.Pong(result.(*proto.PongRsp).Card)
-			return p.Drop(DisCard{card:0}), true
+			return p.Drop(DisCard{card: 0}), true
 		case proto.OperatType_GangOperat:
 			p.Gang(result.(*proto.GangRsp).Gang.Card, result.(*proto.GangRsp).Gang.Type)
 			return p.Draw(DisCard_SelfGang), true

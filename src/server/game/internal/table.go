@@ -23,6 +23,8 @@ type Table struct {
 	fan_card    int32
 	hun_card    int32
 	round       int
+	has_wind    bool
+	has_hun     bool
 	drop_record map[uint64][]int32
 }
 
@@ -47,6 +49,9 @@ func NewTable(tid uint32, tableType proto.CreateTableReq_TableType) *Table {
 	t.tid = tid
 	t.tableType = tableType
 	t.play_turn = 0
+	t.fan_card = 0
+	t.hun_card = 0
+	t.has_wind = true
 	t.drop_record = make(map[uint64][]int32)
 	return t
 }
@@ -140,8 +145,11 @@ func (t *Table) BroadcastExceptMe(msg interface{}, uid uint64) {
 }
 
 func (t *Table) Shuffle() {
-	each_cards := []int32{101, 102, 103, 104, 105, 106, 107, 108, 109, 201, 202, 203, 204, 205, 206, 207, 208, 209,
-		301, 302, 303, 304, 305, 306, 307, 308, 309, 401, 402, 403, 404, 405, 406, 407}
+	each_cards := []int32{101, 102, 103, 104, 105, 106, 107, 108, 109, 201, 202, 203, 204, 205, 206, 207, 208, 209}
+	wind_cards := []int32{301, 302, 303, 304, 305, 306, 307, 308, 309, 401, 402, 403, 404, 405, 406, 407}
+	if t.has_wind {
+		each_cards = append(each_cards, wind_cards...)
+	}
 	var all_cards []int32
 	for i := 0; i < 4; i++ {
 		all_cards = append(all_cards, each_cards[:]...)
@@ -164,8 +172,10 @@ func (t *Table) Deal() {
 		t.left_cards = append(t.left_cards[:0], t.left_cards[13:]...)
 		log.Release("%v", player)
 	}
-	t.fan_card = t.DrawCard()
-	t.hun_card = t.NextCard(t.fan_card)
+	if t.has_hun {
+		t.fan_card = t.DrawCard()
+		t.hun_card = t.NextCard(t.fan_card)
+	}
 
 	for _, player := range t.players {
 		player.Deal()
@@ -223,7 +233,7 @@ func (t *Table) DisCard(disCard DisCard) {
 	t.DropRecord(disCard.fromUid, disCard.card)
 
 	for i := 1; i < len(t.players); i++ {
-		player := t.players[(t.play_turn+i)%len(t.players)]
+		player := t.players[(pos+i)%len(t.players)]
 
 		if dis_card, ok := player.CheckGangOrPong(disCard); ok {
 			pos, err := t.GetPlayerIndex(player.uid)
@@ -669,6 +679,7 @@ func (t *Table) waitPlayer() bool {
 			return true
 		}
 	} else if t.tableType == proto.CreateTableReq_TableRobot && t.GetOnlineNum() > 0 {
+		//todo 等待恢复才能运行
 		return false
 	}
 	return true

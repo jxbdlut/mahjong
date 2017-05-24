@@ -35,9 +35,7 @@ type agent struct {
 	rand            *rand.Rand
 	separate_result [5][]int32
 	turn            int
-	loginChan       chan interface{}
-	joinTableChan   chan interface{}
-	createTableChan chan interface{}
+	rspChan         chan interface{}
 }
 
 const (
@@ -51,7 +49,7 @@ var (
 	others  = make(map[uint64]int)
 )
 
-func (a *agent) Login() error {
+func (a *agent) Login() (bool, error) {
 	md5Ctx := md5.New()
 	md5Ctx.Write([]byte(strconv.FormatUint(a.uid, 10)))
 	cipherStr := md5Ctx.Sum(nil)
@@ -61,13 +59,13 @@ func (a *agent) Login() error {
 		Name:   a.name,
 		Passwd: crypt_passwd,
 	})
-	loginRsp := <-a.loginChan
+	loginRsp := <-a.rspChan
 	log.Debug("uid:%v loginRsp:%v", a.uid, loginRsp)
 	if loginRsp.(*proto.LoginRsp).GetErrCode() == 0 {
 		a.uid = a.uid
-		return nil
+		return loginRsp.(*proto.LoginRsp).NeedRecover, nil
 	} else {
-		return errors.New(loginRsp.(*proto.LoginRsp).GetErrMsg())
+		return false, errors.New(loginRsp.(*proto.LoginRsp).GetErrMsg())
 	}
 }
 
@@ -75,7 +73,7 @@ func HandlerLoginRsp(args []interface{}) {
 	msg := args[0].(*proto.LoginRsp)
 	a := args[1].(*agent)
 	log.Debug("uid:%v LoginRsp:%v", a.uid, msg)
-	a.loginChan <- msg
+	a.rspChan <- msg
 }
 
 func (a *agent) CreateTable() (uint32, error) {
@@ -83,7 +81,7 @@ func (a *agent) CreateTable() (uint32, error) {
 		a.WriteMsg(&proto.CreateTableReq{
 			Type: int32(TableType),
 		})
-		msg := <-a.createTableChan
+		msg := <-a.rspChan
 		log.Debug("uid:%v createTableRsp:%v", a.uid, msg)
 		return msg.(*proto.CreateTableRsp).GetTableId(), nil
 	}
@@ -94,14 +92,14 @@ func HandlerCreateTableRsp(args []interface{}) {
 	msg := args[0].(*proto.CreateTableRsp)
 	a := args[1].(*agent)
 	log.Debug("uid:%v createTableRsp:%v", a.uid, msg)
-	a.createTableChan <- msg
+	a.rspChan <- msg
 }
 
 func (a *agent) JoinTable(tid uint32) error {
 	a.WriteMsg(&proto.JoinTableReq{
 		TableId: tid,
 	})
-	msg := <-a.joinTableChan
+	msg := <-a.rspChan
 	log.Debug("uid:%v join table:%v rsp:%v", a.uid, msg)
 	return nil
 }
@@ -110,7 +108,7 @@ func HandlerJoinTableRsp(args []interface{}) {
 	msg := args[0].(*proto.JoinTableRsp)
 	a := args[1].(*agent)
 	log.Debug("uid:%v join table:%v rsp:%v", a.uid, msg)
-	a.joinTableChan <- msg
+	a.rspChan <- msg
 }
 
 func HandlerJoinTableMsg(args []interface{}) {
@@ -159,7 +157,12 @@ func HandlerOperatReq(args []interface{}) {
 }
 
 func (a *agent) Start() {
-	if a.Login() != nil {
+	need_recover, err := a.Login()
+	if err != nil {
+		return
+	}
+	if need_recover {
+		log.Debug("uid:%v, need_recover", a.uid)
 		return
 	}
 	if a.master {
@@ -182,21 +185,14 @@ func (a *agent) Start() {
 func (a *agent) Run() {
 	go a.Start()
 	for {
-		if a.turn > 10000 {
+		if a.turn > 1 {
 			break
 		}
 		_, err := a.ReadMsg()
-		//log.Debug("readMsg:%v", msg)
 		if err != nil {
 			log.Error("read message:%v", err)
 			break
 		}
-
-		//err = a.Processor.Route(msg, a)
-		//if err != nil {
-		//	log.Debug("route message error: %v", err)
-		//	break
-		//}
 	}
 	if a.master {
 		c <- os.Signal(os.Interrupt)
@@ -346,8 +342,8 @@ func (a *agent) SetUserData(data interface{}) {
 
 func main() {
 	lconf.LogLevel = conf.Server.LogLevel
-	//lconf.LogPath = conf.Server.LogPath
-	lconf.LogPath = "./log/"
+	lconf.LogPath = conf.Server.LogPath
+	//lconf.LogPath = "./log/"
 	lconf.LogFlag = conf.LogFlag
 	lconf.ConsolePort = conf.Server.ConsolePort
 	lconf.ProfilePath = conf.Server.ProfilePath
@@ -384,9 +380,7 @@ func main() {
 			proto.Processor.SetHandler(&proto.OperatMsg{}, HandlerOperatMsg)
 			r := rand.New(rand.NewSource(time.Now().UnixNano()))
 			a := &agent{uid: uid, conn: conn, Processor: proto.Processor, master: is_master, rand: r}
-			a.loginChan = make(chan interface{})
-			a.joinTableChan = make(chan interface{})
-			a.createTableChan = make(chan interface{})
+			a.rspChan = make(chan interface{})
 			a.turn = 0
 			return a
 		}
