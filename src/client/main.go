@@ -34,13 +34,12 @@ type agent struct {
 	master          bool
 	rand            *rand.Rand
 	separate_result [5][]int32
-	turn            int
 	rspChan         chan interface{}
 }
 
 const (
 	PlayerNum = 1
-	TableType = proto.CreateTableReq_TableRobot
+	TableType = proto.CreateTableReq_TableNomal
 )
 
 var (
@@ -91,7 +90,6 @@ func (a *agent) CreateTable() (uint32, error) {
 func HandlerCreateTableRsp(args []interface{}) {
 	msg := args[0].(*proto.CreateTableRsp)
 	a := args[1].(*agent)
-	log.Debug("uid:%v createTableRsp:%v", a.uid, msg)
 	a.rspChan <- msg
 }
 
@@ -124,12 +122,23 @@ func HandlerOperatMsg(args []interface{}) {
 	log.Release("uid:%v, pos:%v, %v", a.uid, others[msg.Uid], msg.Info())
 }
 
+func HandlerTableOperatReq(args []interface{}) {
+	msg := args[0].(*proto.TableOperatReq)
+	a := args[1].(*agent)
+	a.WriteMsg(&proto.TableOperatRsp{Ok: true, Type: msg.Type})
+}
+
+func HandlerTableOperatMsg(args []interface{}) {
+	msg := args[0].(*proto.TableOperatMsg)
+	a := args[1].(*agent)
+	log.Release("uid:%v, pos:%v, %v", a.uid, others[msg.Uid], msg)
+}
+
 func HandlerOperatReq(args []interface{}) {
 	req := args[0].(*proto.OperatReq)
 	a := args[1].(*agent)
 	rsp := proto.NewOperatRsp()
 	if req.Type&proto.OperatType_DealOperat != 0 {
-		a.turn++
 		rsp.Type = proto.OperatType_DealOperat
 		a.Deal(req.DealReq, rsp.DealRsp)
 	} else if req.Type&proto.OperatType_HuOperat != 0 {
@@ -185,9 +194,6 @@ func (a *agent) Start() {
 func (a *agent) Run() {
 	go a.Start()
 	for {
-		if a.turn > 1 {
-			break
-		}
 		_, err := a.ReadMsg()
 		if err != nil {
 			log.Error("read message:%v", err)
@@ -378,10 +384,11 @@ func main() {
 			proto.Processor.SetHandler(&proto.UserJoinTableMsg{}, HandlerJoinTableMsg)
 			proto.Processor.SetHandler(&proto.OperatReq{}, HandlerOperatReq)
 			proto.Processor.SetHandler(&proto.OperatMsg{}, HandlerOperatMsg)
+			proto.Processor.SetHandler(&proto.TableOperatReq{}, HandlerTableOperatReq)
+			proto.Processor.SetHandler(&proto.TableOperatMsg{}, HandlerTableOperatMsg)
 			r := rand.New(rand.NewSource(time.Now().UnixNano()))
 			a := &agent{uid: uid, conn: conn, Processor: proto.Processor, master: is_master, rand: r}
 			a.rspChan = make(chan interface{})
-			a.turn = 0
 			return a
 		}
 

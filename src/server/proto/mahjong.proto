@@ -216,16 +216,38 @@ message OperatMsg
     DropRsp drop = 9;
 }
 
-message ContinueReq
+enum TableOperat {
+    TableStart = 0;
+    TableContinue = 1;
+}
+
+message TableOperatReq
+{
+    TableOperat type = 1;
+}
+
+message TableOperatRsp
+{
+    TableOperat Type = 1;
+    bool ok = 2;
+}
+
+message TableOperatMsg
+{
+    uint64 uid = 1;
+    TableOperat type = 2;
+    bool OK = 3;
+}
+
+message GetAreaReq
 {
 
 }
 
-message ContinueRsp
+message GetAreaRsp
 {
-    bool isContinue = 1;
-}
-
-service MahjongService {
-    rpc Operat(OperatReq) returns (OperatRsp);
+    int32 err_code = 1;
+    string err_msg = 2;
+    int32 area_id = 3;
+    string area_name = 4;
 }

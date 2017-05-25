@@ -25,8 +25,9 @@ func init() {
 	Processor.Register(&OperatReq{})
 	Processor.Register(&OperatRsp{})
 	Processor.Register(&OperatMsg{})
-	Processor.Register(&ContinueReq{})
-	Processor.Register(&ContinueRsp{})
+	Processor.Register(&TableOperatReq{})
+	Processor.Register(&TableOperatRsp{})
+	Processor.Register(&TableOperatMsg{})
 
 	//Processor.Range(printRegistedMsg)
 }

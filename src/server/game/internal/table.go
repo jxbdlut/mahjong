@@ -55,7 +55,7 @@ func NewTable(tid uint32, tableType proto.CreateTableReq_TableType) *Table {
 	t.has_wind = true
 	t.drop_record = make(map[uint64][]int32)
 	if tableType == proto.CreateTableReq_TableRobot {
-		t.avail_count = 1
+		t.avail_count = 2
 	} else if tableType == proto.CreateTableReq_TableNomal {
 		t.avail_count = 8
 	}
@@ -654,20 +654,26 @@ func (t *Table) GetOnlineNum() int {
 	return num
 }
 
-func (t *Table) IsContinue() bool {
-	rsp := make(chan bool, 3)
-	for _, player := range t.players {
-		go func() {
-			rsp <- player.CheckContinue()
-		} ()
+func (t *Table) TableOperat(tableOperat proto.TableOperat) bool {
+	rsp := make(chan int, 4)
+	result := make([]bool, 4)
+	ret := true
+	for i := range t.players {
+		go func(index int) {
+			player := t.players[index]
+			ok := player.CheckTableOperat(tableOperat)
+			result[index] = ok
+			rsp <- index
+		}(i)
 	}
 	for i := 0; i < 4; i++ {
-		isContinue := <- rsp
-		if !isContinue {
-			return false
-		}
+		index := <-rsp
+		player := t.players[index]
+		tableOperatMsg := proto.TableOperatMsg{Uid: player.uid, Type: tableOperat, OK: result[index]}
+		t.players[index].BoardCastMsg(&tableOperatMsg)
+		ret = ret&&result[index]
 	}
-	return true
+	return ret
 }
 
 func (t *Table) Play() {
@@ -718,6 +724,9 @@ func (t *Table) Run() {
 			time.Sleep(time.Second)
 			//todo
 		} else {
+			if !t.TableOperat(proto.TableOperat_TableStart) {
+				break
+			}
 			t.Clear()
 			t.Play()
 			log.Debug("tid:%v, running, play_count:%v, players num:%v, left_cards num:%d", t.tid, t.play_count, len(t.players), len(t.left_cards))
@@ -728,7 +737,7 @@ func (t *Table) Run() {
 			break
 		}
 
-		if !t.IsContinue() {
+		if !t.TableOperat(proto.TableOperat_TableContinue) {
 			break
 		}
 		//time.Sleep(50 * time.Millisecond)

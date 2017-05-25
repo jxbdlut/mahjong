@@ -1,16 +1,18 @@
 package internal
 
 import (
-	"server/proto"
+	"errors"
+	"reflect"
 	"server/mahjong"
+	"server/proto"
 )
 
 type robot interface {
-	HandlerOperatMsg(req *proto.OperatReq) (*proto.OperatRsp, error)
+	HandlerMsg(req interface{}) (interface{}, error)
 }
 
 type BaseRobot struct {
-	player  *Player
+	player *Player
 }
 
 func NewRobot(p *Player) *BaseRobot {
@@ -19,7 +21,27 @@ func NewRobot(p *Player) *BaseRobot {
 	return a
 }
 
-func (a *BaseRobot)HandlerOperatMsg(req *proto.OperatReq) (*proto.OperatRsp, error) {
+func (a *BaseRobot) HandlerMsg(req interface{}) (interface{}, error) {
+	if reflect.TypeOf(req) == reflect.TypeOf(&proto.OperatReq{}) {
+		return a.HandlerOperatMsg(req.(*proto.OperatReq))
+	} else if reflect.TypeOf(req) == reflect.TypeOf(&proto.TableOperatReq{}) {
+		return a.HandlerTableOperatMsg(req.(*proto.TableOperatReq))
+	}
+	return nil, errors.New("err msg type")
+}
+
+func (a *BaseRobot) HandlerTableOperatMsg(req *proto.TableOperatReq) (*proto.TableOperatRsp, error) {
+	var ok bool
+	if req.Type == proto.TableOperat_TableStart {
+		ok = true
+	} else if req.Type == proto.TableOperat_TableContinue {
+		ok = false
+	}
+	rsp := &proto.TableOperatRsp{Ok: ok, Type: req.Type}
+	return rsp, nil
+}
+
+func (a *BaseRobot) HandlerOperatMsg(req *proto.OperatReq) (*proto.OperatRsp, error) {
 	rsp := proto.NewOperatRsp()
 	if req.Type&proto.OperatType_DealOperat != 0 {
 		rsp.Type = proto.OperatType_DealOperat
@@ -46,7 +68,7 @@ func (a *BaseRobot)HandlerOperatMsg(req *proto.OperatReq) (*proto.OperatRsp, err
 	return rsp, nil
 }
 
-func (a *BaseRobot)Hu(req *proto.HuReq, rsp *proto.HuRsp) bool {
+func (a *BaseRobot) Hu(req *proto.HuReq, rsp *proto.HuRsp) bool {
 	rsp.Ok = true
 	rsp.Card = req.Card
 	rsp.Type = req.Type
@@ -62,7 +84,7 @@ func (a *BaseRobot) Draw(req *proto.DrawReq, rsp *proto.DrawRsp) bool {
 	return true
 }
 
-func (a *BaseRobot)Drop(req *proto.DropReq, rsp *proto.DropRsp) bool {
+func (a *BaseRobot) Drop(req *proto.DropReq, rsp *proto.DropRsp) bool {
 	cards_copy := mahjong.Copy(a.player.cards)
 	separate_result := mahjong.SeparateCards(cards_copy, a.player.table.hun_card)
 	discard := mahjong.DropSingle(separate_result)
@@ -73,7 +95,7 @@ func (a *BaseRobot)Drop(req *proto.DropReq, rsp *proto.DropRsp) bool {
 	return true
 }
 
-func (a *BaseRobot)Eat(req *proto.EatReq, rsp *proto.EatRsp) bool {
+func (a *BaseRobot) Eat(req *proto.EatReq, rsp *proto.EatRsp) bool {
 	rsp.Eat = req.Eat[0]
 	return true
 }
@@ -84,8 +106,7 @@ func (a *BaseRobot) Gang(req *proto.GangReq, rsp *proto.GangRsp) bool {
 	return true
 }
 
-func (a *BaseRobot)Pong(req *proto.PongReq, rsp *proto.PongRsp) bool {
+func (a *BaseRobot) Pong(req *proto.PongReq, rsp *proto.PongRsp) bool {
 	rsp.Card, rsp.Ok = req.Card, true
 	return true
 }
-

@@ -6,6 +6,7 @@ import (
 	"github.com/name5566/leaf/gate"
 	"github.com/name5566/leaf/log"
 	"net"
+	"reflect"
 	"server/mahjong"
 	"server/proto"
 	"sort"
@@ -253,7 +254,7 @@ func (p *Player) HandlerOperatRsp(msg interface{}) {
 	rsp_chan <- msg
 }
 
-func (p *Player) HandlerContinue(msg interface{}) {
+func (p *Player) HandlerTableOperatRsp(msg interface{}) {
 	rsp_chan <- msg
 }
 
@@ -269,32 +270,37 @@ func (p *Player) SendRcv(msg interface{}) (interface{}, error) {
 	}
 }
 
-func (p *Player) BoardCastMsg(rsp *proto.OperatRsp) {
-	msg := proto.NewOperatMsg()
-	msg.Uid = p.uid
-	msg.Type = rsp.Type
-	switch rsp.Type {
-	case proto.OperatType_DealOperat:
-		msg.Deal = rsp.DealRsp
-	case proto.OperatType_DrawOperat:
-		msg.Draw = rsp.DrawRsp
-	case proto.OperatType_HuOperat:
-		msg.Hu = rsp.HuRsp
-	case proto.OperatType_PongOperat:
-		msg.Pong = rsp.PongRsp
-	case proto.OperatType_EatOperat:
-		msg.Eat = rsp.EatRsp
-	case proto.OperatType_GangOperat:
-		msg.Gang = rsp.GangRsp
-	case proto.OperatType_DropOperat:
-		msg.Drop = rsp.DropRsp
+func (p *Player) BoardCastMsg(msg interface{}) {
+	if reflect.TypeOf(msg) == reflect.TypeOf(&proto.OperatRsp{}) {
+		rsp := msg.(*proto.OperatRsp)
+		operatMsg := proto.NewOperatMsg()
+		operatMsg.Uid = p.uid
+		operatMsg.Type = rsp.Type
+		switch rsp.Type {
+		case proto.OperatType_DealOperat:
+			operatMsg.Deal = rsp.DealRsp
+		case proto.OperatType_DrawOperat:
+			operatMsg.Draw = rsp.DrawRsp
+		case proto.OperatType_HuOperat:
+			operatMsg.Hu = rsp.HuRsp
+		case proto.OperatType_PongOperat:
+			operatMsg.Pong = rsp.PongRsp
+		case proto.OperatType_EatOperat:
+			operatMsg.Eat = rsp.EatRsp
+		case proto.OperatType_GangOperat:
+			operatMsg.Gang = rsp.GangRsp
+		case proto.OperatType_DropOperat:
+			operatMsg.Drop = rsp.DropRsp
+		}
+		p.table.BroadcastExceptMe(operatMsg, p.uid)
+	} else if reflect.TypeOf(msg) == reflect.TypeOf(&proto.TableOperatMsg{}) {
+		p.table.BroadcastExceptMe(msg, p.uid)
 	}
-	p.table.BroadcastExceptMe(msg, p.uid)
 }
 
 func (p *Player) Notify(req interface{}) (interface{}, error) {
 	if p.isRobot {
-		return p.robot.HandlerOperatMsg(req.(*proto.OperatReq))
+		return p.robot.HandlerMsg(req)
 	}
 	if p.online {
 		rsp, err := p.SendRcv(req)
@@ -305,7 +311,7 @@ func (p *Player) Notify(req interface{}) (interface{}, error) {
 		return rsp, nil
 	} else {
 		p.WriteMsg(req)
-		return p.robot.HandlerOperatMsg(req.(*proto.OperatReq))
+		return p.robot.HandlerMsg(req)
 	}
 	return nil, errors.New("online error")
 }
@@ -692,14 +698,25 @@ func (p *Player) CheckGangOrPong(disCard DisCard) (DisCard, bool) {
 	return disCard, false
 }
 
-func (p *Player) CheckContinue() bool {
-	req := proto.ContinueReq{}
-	rsp, err := p.Notify(req)
-	if err != nil {
-		log.Error("uid:%v CheckContinue sendrcv err:%v", p.uid, err)
+func (p *Player) ValidTableOpetat(req *proto.TableOperatReq, rsp *proto.TableOperatRsp) bool {
+	if req.Type != rsp.Type {
 		return false
 	}
-	return rsp.(*proto.ContinueRsp).IsContinue
+	return true
+}
+
+func (p *Player) CheckTableOperat(t proto.TableOperat) bool {
+	req := proto.TableOperatReq{Type: t}
+	rsp, err := p.Notify(&req)
+	if err != nil {
+		log.Error("uid:%v CheckTableOperat sendrcv err:%v", p.uid, err)
+		return false
+	}
+	if !p.ValidTableOpetat(&req, rsp.(*proto.TableOperatRsp)) {
+		log.Error("uid:%v CheckTableOperat rsp err, rsp:%v", rsp)
+		return false
+	}
+	return rsp.(*proto.TableOperatRsp).Ok
 }
 
 func (p *Player) SetMaster(master bool) {
