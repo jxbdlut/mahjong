@@ -29,6 +29,7 @@ func init() {
 	handler(&proto.CreateTableReq{}, handlerCreateTable)
 	handler(&proto.JoinTableReq{}, handlerJoinTable)
 	handler(&proto.OperatRsp{}, handlerOperatRsp)
+	handler(&proto.ContinueRsp{}, handlerContinueRsp)
 	tables = make(map[uint32]*Table)
 	robots = make(map[uint64]*gate.Agent)
 	MapUidPlayer = make(map[uint64]*Player)
@@ -107,7 +108,6 @@ func handlerJoinTable(args []interface{}) {
 			rsp.ErrCode = 10000
 			rsp.ErrMsg = "you areadly in table"
 		} else {
-
 			a.SetUserData(&userdata.UserData{
 				Uid: uid,
 				Tid: tid,
@@ -132,6 +132,17 @@ func handlerJoinTable(args []interface{}) {
 	}
 
 	a.WriteMsg(&rsp)
+}
+
+func handlerContinueRsp(args []interface{}) {
+	rsp := args[0]
+	a := args[1].(gate.Agent)
+	tid := a.UserData().(*userdata.UserData).Tid
+	uid := a.UserData().(*userdata.UserData).Uid
+	table := tables[tid]
+	if player, err := table.GetPlayer(uid); err == nil {
+		player.HandlerContinue(rsp)
+	}
 }
 
 func handlerOperatRsp(args []interface{}) {

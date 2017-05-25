@@ -26,6 +26,7 @@ type Table struct {
 	has_wind    bool
 	has_hun     bool
 	drop_record map[uint64][]int32
+	avail_count int
 }
 
 const (
@@ -53,6 +54,11 @@ func NewTable(tid uint32, tableType proto.CreateTableReq_TableType) *Table {
 	t.hun_card = 0
 	t.has_wind = true
 	t.drop_record = make(map[uint64][]int32)
+	if tableType == proto.CreateTableReq_TableRobot {
+		t.avail_count = 1
+	} else if tableType == proto.CreateTableReq_TableNomal {
+		t.avail_count = 8
+	}
 	return t
 }
 
@@ -639,6 +645,7 @@ func (t *Table) GetTingCards(p *Player) map[int32]interface{} {
 
 func (t *Table) GetOnlineNum() int {
 	num := 0
+	log.Debug("tid:%v players num:%v", t.tid, len(t.players))
 	for _, player := range t.players {
 		if player.online && !player.isRobot {
 			num++
@@ -647,8 +654,25 @@ func (t *Table) GetOnlineNum() int {
 	return num
 }
 
+func (t *Table) IsContinue() bool {
+	rsp := make(chan bool, 3)
+	for _, player := range t.players {
+		go func() {
+			rsp <- player.CheckContinue()
+		} ()
+	}
+	for i := 0; i < 4; i++ {
+		isContinue := <- rsp
+		if !isContinue {
+			return false
+		}
+	}
+	return true
+}
+
 func (t *Table) Play() {
 	t.play_count++
+	t.avail_count--
 	t.Shuffle()
 	t.Deal()
 	for len(t.left_cards) > 10 && t.win_player == nil && len(t.players) == 4 {
@@ -686,7 +710,6 @@ func (t *Table) waitPlayer() bool {
 }
 
 func (t *Table) Run() {
-	start := time.Now().UTC()
 	for {
 		if len(t.players) == 0 {
 			break
@@ -699,14 +722,21 @@ func (t *Table) Run() {
 			t.Play()
 			log.Debug("tid:%v, running, play_count:%v, players num:%v, left_cards num:%d", t.tid, t.play_count, len(t.players), len(t.left_cards))
 			time.Sleep(1 * time.Millisecond)
-			start = time.Now().UTC()
 		}
-		//time.Sleep(50 * time.Millisecond)
-		now := time.Now().UTC()
-		if start.Add(100 * time.Second).Before(now) {
-			log.Error("tid:%v, timeout, start:%v, now:%v", t.tid, start, now)
+
+		if t.avail_count == 0 {
 			break
 		}
+
+		if !t.IsContinue() {
+			break
+		}
+		//time.Sleep(50 * time.Millisecond)
+		//now := time.Now().UTC()
+		//if start.Add(100 * time.Second).Before(now) {
+		//	log.Error("tid:%v, timeout, start:%v, now:%v", t.tid, start, now)
+		//	break
+		//}
 	}
 	for _, player := range t.players {
 		t.RemoveAgent(player)

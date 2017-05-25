@@ -216,6 +216,16 @@ message OperatMsg
     DropRsp drop = 9;
 }
 
+message ContinueReq
+{
+
+}
+
+message ContinueRsp
+{
+    bool isContinue = 1;
+}
+
 service MahjongService {
     rpc Operat(OperatReq) returns (OperatRsp);
 }

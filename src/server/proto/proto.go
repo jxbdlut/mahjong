@@ -25,6 +25,8 @@ func init() {
 	Processor.Register(&OperatReq{})
 	Processor.Register(&OperatRsp{})
 	Processor.Register(&OperatMsg{})
+	Processor.Register(&ContinueReq{})
+	Processor.Register(&ContinueRsp{})
 
 	//Processor.Range(printRegistedMsg)
 }

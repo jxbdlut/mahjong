@@ -103,7 +103,7 @@ func (p *Player) AddGangWave(cards []int32, t proto.GangType) {
 			}
 		}
 	} else {
-		p.waves = append(p.waves, proto.Wave{Cards: cards, WaveType: proto.Wave_GangWave, GangType:t})
+		p.waves = append(p.waves, proto.Wave{Cards: cards, WaveType: proto.Wave_GangWave, GangType: t})
 	}
 }
 
@@ -250,7 +250,10 @@ func (p *Player) Draw(cardType DisCardType) DisCard {
 }
 
 func (p *Player) HandlerOperatRsp(msg interface{}) {
-	p.online = true
+	rsp_chan <- msg
+}
+
+func (p *Player) HandlerContinue(msg interface{}) {
 	rsp_chan <- msg
 }
 
@@ -289,9 +292,9 @@ func (p *Player) BoardCastMsg(rsp *proto.OperatRsp) {
 	p.table.BroadcastExceptMe(msg, p.uid)
 }
 
-func (p *Player) Notify(req *proto.OperatReq) (interface{}, error) {
+func (p *Player) Notify(req interface{}) (interface{}, error) {
 	if p.isRobot {
-		return p.robot.HandlerOperatMsg(req)
+		return p.robot.HandlerOperatMsg(req.(*proto.OperatReq))
 	}
 	if p.online {
 		rsp, err := p.SendRcv(req)
@@ -302,7 +305,7 @@ func (p *Player) Notify(req *proto.OperatReq) (interface{}, error) {
 		return rsp, nil
 	} else {
 		p.WriteMsg(req)
-		return p.robot.HandlerOperatMsg(req)
+		return p.robot.HandlerOperatMsg(req.(*proto.OperatReq))
 	}
 	return nil, errors.New("online error")
 }
@@ -687,6 +690,16 @@ func (p *Player) CheckGangOrPong(disCard DisCard) (DisCard, bool) {
 		}
 	}
 	return disCard, false
+}
+
+func (p *Player) CheckContinue() bool {
+	req := proto.ContinueReq{}
+	rsp, err := p.Notify(req)
+	if err != nil {
+		log.Error("uid:%v CheckContinue sendrcv err:%v", p.uid, err)
+		return false
+	}
+	return rsp.(*proto.ContinueRsp).IsContinue
 }
 
 func (p *Player) SetMaster(master bool) {
