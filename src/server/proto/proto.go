@@ -1,17 +1,18 @@
 package proto
 
 import (
+	"errors"
 	"fmt"
-	"github.com/name5566/leaf/network/protobuf"
+	"github.com/jxbdlut/leaf/network/protobuf"
 	"server/mahjong"
 	"strings"
 )
 
 var (
-	Processor = protobuf.NewProcessor()
+	Processor   = protobuf.NewProcessor()
 	GangTypeMap = map[GangType]string{GangType_MingGang: "明杠", GangType_BuGang: "补杠", GangType_AnGang: "暗杠"}
-	HuTypeMap = map[HuType]string{HuType_Nomal: "平胡", HuType_Mo: "自摸", HuType_GangHua: "杠上花", HuType_QiangGang: "抢杠", HuType_HaiDiLao: "海底捞"}
-	WaveTypeMap = map[Wave_WaveType]string{Wave_EatWave:"吃", Wave_PongWave:"碰", Wave_GangWave:"杠"}
+	HuTypeMap   = map[HuType]string{HuType_Nomal: "平胡", HuType_Mo: "自摸", HuType_GangHua: "杠上花", HuType_QiangGang: "抢杠", HuType_HaiDiLao: "海底捞"}
+	WaveTypeMap = map[Wave_WaveType]string{Wave_EatWave: "吃", Wave_PongWave: "碰", Wave_GangWave: "杠"}
 )
 
 func init() {
@@ -36,7 +37,6 @@ func init() {
 //	log.Debug("id:%v, type:%v", id, t)
 //}
 
-
 func GangTypeStr(gangType GangType) string {
 	return GangTypeMap[gangType]
 }
@@ -49,7 +49,7 @@ func WaveStr(wave Wave_WaveType) string {
 	return WaveTypeMap[wave]
 }
 
-func WavesStr(waves []Wave) string {
+func WavesStr(waves []*Wave) string {
 	var str_cards []string
 	for _, wave := range waves {
 		str_cards = append(str_cards, wave.Info())
@@ -77,9 +77,15 @@ func (m *Gang) Equal(gang *Gang) bool {
 	if m.Type != gang.Type {
 		return false
 	}
-	if m.Card != gang.Card {
+	if len(m.Cards) != len(gang.Cards) {
 		return false
 	}
+	for i, card := range gang.Cards {
+		if m.Cards[i] != card {
+			return false
+		}
+	}
+
 	return true
 }
 
@@ -197,7 +203,6 @@ func (m *DrawRsp) Info() string {
 }
 
 func (m *HuReq) Info() string {
-	return "[" + mahjong.CardStr(m.Card) + "]"
 	return "[" + fmt.Sprintf("card:%v, type:%v, loser:%v", mahjong.CardStr(m.Card), HuTypeStr(m.Type), m.Lose) + "]"
 }
 
@@ -237,7 +242,7 @@ func (m *PongRsp) Info() string {
 }
 
 func (m *Gang) Info() string {
-	return fmt.Sprintf("[%v, %v]", mahjong.CardStr(m.Card), GangTypeStr(m.Type))
+	return fmt.Sprintf("[%v, %v]", mahjong.CardsStr(m.Cards), GangTypeStr(m.Type))
 }
 
 func (m *GangReq) Info() string {
@@ -307,4 +312,13 @@ func (m *OperatMsg) Info() string {
 
 func (m *Wave) Info() string {
 	return fmt.Sprintf("%v", mahjong.CardsStr(m.Cards))
+}
+
+func (m *Player) GetPlayerIndex(uid uint64) (int, error) {
+	for i, pos := range m.Pos {
+		if pos.Uid == uid {
+			return i, nil
+		}
+	}
+	return 0, errors.New(fmt.Sprintf("uid:%v not in table", uid))
 }

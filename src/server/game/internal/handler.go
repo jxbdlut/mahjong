@@ -3,11 +3,12 @@ package internal
 import (
 	"reflect"
 
-	"github.com/name5566/leaf/gate"
-	"github.com/name5566/leaf/log"
+	"github.com/jxbdlut/leaf/gate"
+	"github.com/jxbdlut/leaf/log"
 	"net"
 	"server/proto"
 	"server/userdata"
+	"server/game/area"
 )
 
 const (
@@ -18,7 +19,7 @@ const (
 )
 
 var (
-	tables       map[uint32]*Table
+	Tables       map[uint32]*Table
 	robots       map[uint64]*gate.Agent
 	curTableId   uint32 = 10000
 	curRobotId   uint64 = 100000
@@ -30,7 +31,7 @@ func init() {
 	handler(&proto.JoinTableReq{}, handlerJoinTable)
 	handler(&proto.OperatRsp{}, handlerOperatRsp)
 	handler(&proto.TableOperatRsp{}, handlerTableOperatRsp)
-	tables = make(map[uint32]*Table)
+	Tables = make(map[uint32]*Table)
 	robots = make(map[uint64]*gate.Agent)
 	MapUidPlayer = make(map[uint64]*Player)
 }
@@ -50,17 +51,21 @@ func checkLogin(a gate.Agent) bool {
 func handlerCreateTable(args []interface{}) {
 	req := args[0].(*proto.CreateTableReq)
 	a := args[1].(gate.Agent)
+	seq := args[2].(uint32)
 	if !checkLogin(a) {
 		log.Error("no login!")
-		a.WriteMsg(&proto.CreateTableRsp{
+		a.Replay(&proto.CreateTableRsp{
 			ErrCode: -1,
 			ErrMsg:  "no login!",
-		})
+		}, seq)
 		return
 	}
 	uid := a.UserData().(*userdata.UserData).Uid
 	tid := genTableId()
+	log.Debug("uid:%v, create table, tid:%v, seq:%v", uid, tid, seq)
 	table := NewTable(tid, proto.CreateTableReq_TableType(req.Type))
+	table.rule = area.GetArea(uint16(req.Area))
+	log.Debug("tid:%v, rule:%v", tid, reflect.TypeOf(table.rule))
 	a.SetUserData(&userdata.UserData{
 		Uid: uid,
 		Tid: tid,
@@ -72,39 +77,35 @@ func handlerCreateTable(args []interface{}) {
 			agent := NewAgent(rid)
 			robots[rid] = &agent
 			table.AddAgent(agent, false)
-			table.Broadcast(&proto.UserJoinTableMsg{
-				Uid: rid,
-				Tid: tid,
-				Pos: int32(i + 1),
-			})
 		}
 	}
 	go table.Run()
-	tables[tid] = table
-	log.Debug("uid:%v, create table", uid)
-	a.WriteMsg(&proto.CreateTableRsp{
+	Tables[tid] = table
+	a.Replay(&proto.CreateTableRsp{
 		ErrCode: 0,
 		ErrMsg:  "CreateTable success!",
 		TableId: tid,
-	})
+	}, seq)
 }
 
 func handlerJoinTable(args []interface{}) {
 	req := args[0].(*proto.JoinTableReq)
 	a := args[1].(gate.Agent)
+	seq := args[2].(uint32)
 	rsp := proto.JoinTableRsp{}
 	if !checkLogin(a) {
 		log.Error("no login!")
-		a.WriteMsg(&proto.CreateTableRsp{
+		a.Replay(&proto.CreateTableRsp{
 			ErrCode: -1,
 			ErrMsg:  "no login!",
-		})
+		}, seq)
 		return
 	}
 	uid := a.UserData().(*userdata.UserData).Uid
 	tid := req.TableId
-	if table, ok := tables[tid]; ok {
-		if _, ok := table.GetPlayerIndex(uid); ok == nil {
+	log.Debug("uid:%v, join table, tid:%v, seq:%v", uid, tid, seq)
+	if table, ok := Tables[tid]; ok {
+		if _, err := table.GetPlayerIndex(uid); err == nil {
 			rsp.ErrCode = 10000
 			rsp.ErrMsg = "you areadly in table"
 		} else {
@@ -112,17 +113,19 @@ func handlerJoinTable(args []interface{}) {
 				Uid: uid,
 				Tid: tid,
 			})
-			if pos, err := tables[tid].AddAgent(a, false); err != nil {
-				rsp.ErrCode = 0
-				rsp.ErrMsg = "join success!"
-				table.BroadcastExceptMe(&proto.UserJoinTableMsg{
-					Uid: uid,
-					Tid: tid,
-					Pos: int32(pos),
-				}, uid)
-			} else {
+			if pos, err := Tables[tid].AddAgent(a, false); err != nil {
 				rsp.ErrCode = -1
 				rsp.ErrMsg = err.Error()
+			} else {
+				rsp.ErrCode = 0
+				rsp.ErrMsg = "join success!"
+				rsp.Pos = int32(pos)
+				joinTableMsg := proto.UserJoinTableMsg{Tid:tid}
+				for i, player := range Tables[tid].players {
+					seat := &proto.Seat{Uid:player.uid, Name:player.name, Pos:int32(i + 1)}
+					joinTableMsg.Seats = append(joinTableMsg.Seats, seat)
+				}
+				table.Broadcast(&joinTableMsg)
 			}
 		}
 	} else {
@@ -131,7 +134,7 @@ func handlerJoinTable(args []interface{}) {
 		rsp.ErrMsg = "table is not exist"
 	}
 
-	a.WriteMsg(&rsp)
+	a.Replay(&rsp, seq)
 }
 
 func handlerTableOperatRsp(args []interface{}) {
@@ -139,7 +142,7 @@ func handlerTableOperatRsp(args []interface{}) {
 	a := args[1].(gate.Agent)
 	tid := a.UserData().(*userdata.UserData).Tid
 	uid := a.UserData().(*userdata.UserData).Uid
-	table := tables[tid]
+	table := Tables[tid]
 	if player, err := table.GetPlayer(uid); err == nil {
 		player.HandlerTableOperatRsp(rsp)
 	}
@@ -150,7 +153,7 @@ func handlerOperatRsp(args []interface{}) {
 	a := args[1].(gate.Agent)
 	tid := a.UserData().(*userdata.UserData).Tid
 	uid := a.UserData().(*userdata.UserData).Uid
-	table := tables[tid]
+	table := Tables[tid]
 	if player, err := table.GetPlayer(uid); err == nil {
 		player.HandlerOperatRsp(rsp)
 	}
@@ -158,7 +161,7 @@ func handlerOperatRsp(args []interface{}) {
 
 func genTableId() uint32 {
 	for {
-		if _, ok := tables[curTableId]; ok {
+		if _, ok := Tables[curTableId]; ok {
 			curTableId++
 			if curTableId > MaxTableId {
 				curTableId = MinTableId
@@ -194,8 +197,22 @@ func NewAgent(uid uint64) gate.Agent {
 	return a
 }
 
-func (a *agent) WriteMsg(msg interface{}) {
+func (a *agent) Replay(msg interface{}, seq uint32) {
+
+}
+
+func (a *agent) Send(msg interface{}) {
+
+}
+
+func (a *agent) SendRcv(msg interface{}) (interface{}, error) {
+	// todo
+	return nil, nil
+}
+
+func (a *agent) WriteMsg(msg interface{}, cbChan chan interface{}, seq uint32) {
 	//log.Debug("uid:%v writemsg", a.UserData().(*userdata.UserData).Uid)
+	return
 }
 
 func (a *agent) UserData() interface{} {

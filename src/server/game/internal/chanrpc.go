@@ -1,14 +1,16 @@
 package internal
 
 import (
-	"github.com/name5566/leaf/gate"
-	"github.com/name5566/leaf/log"
+	"github.com/jxbdlut/leaf/gate"
+	"github.com/jxbdlut/leaf/log"
 	"server/userdata"
+	"server/game/area"
 )
 
 func init() {
 	skeleton.RegisterChanRPC("NewRobot", rpcNewAgent)
 	skeleton.RegisterChanRPC("CloseAgent", rpcCloseAgent)
+	area.Init()
 }
 
 func rpcNewAgent(args []interface{}) {
@@ -24,9 +26,12 @@ func rpcCloseAgent(args []interface{}) {
 	if a == nil {
 		return
 	}
+	if a.UserData() == nil {
+		return
+	}
 	uid := a.UserData().(*userdata.UserData).Uid
 	tid := a.UserData().(*userdata.UserData).Tid
-	if table, ok := tables[tid]; ok {
+	if table, ok := Tables[tid]; ok {
 		//table.RemoveAgent(a)
 		//a.Destroy()
 		table.OfflineAgent(a)

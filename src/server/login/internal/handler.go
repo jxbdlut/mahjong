@@ -3,8 +3,8 @@ package internal
 import (
 	"crypto/md5"
 	"encoding/hex"
-	"github.com/name5566/leaf/gate"
-	"github.com/name5566/leaf/log"
+	"github.com/jxbdlut/leaf/gate"
+	"github.com/jxbdlut/leaf/log"
 	"reflect"
 	"server/game"
 	"server/proto"
@@ -24,8 +24,9 @@ func init() {
 func handleLogin(args []interface{}) {
 	req := args[0].(*proto.LoginReq)
 	a := args[1].(gate.Agent)
+	seq := args[2].(uint32)
 
-	log.Debug("login:%v", req)
+	log.Debug("login:%v, seq:%v", req, seq)
 	md5Ctx := md5.New()
 	md5Ctx.Write([]byte(strconv.FormatUint(req.Uid, 10)))
 	cipherStr := md5Ctx.Sum(nil)
@@ -42,16 +43,16 @@ func handleLogin(args []interface{}) {
 		if ok {
 			player.SetAgent(a)
 		}
-		a.WriteMsg(&proto.LoginRsp{
+		a.Replay(&proto.LoginRsp{
 			ErrCode:     0,
 			ErrMsg:      "login success",
 			NeedRecover: need_recover,
-		})
+		}, seq)
 	} else {
-		a.WriteMsg(&proto.LoginRsp{
+		a.Replay(&proto.LoginRsp{
 			ErrCode: -1,
 			ErrMsg:  "account or password error!",
-		})
+		}, seq)
 	}
 
 }

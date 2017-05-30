@@ -22,7 +22,8 @@ message CreateTableReq
         TableRobot = 0;
         TableNomal = 1;
     }
-    int32 type = 2;
+    int32 type = 1;
+    int32 area = 2;
 }
 
 message CreateTableRsp
@@ -41,6 +42,7 @@ message JoinTableRsp
 {
     int32 err_code = 1;
     string err_msg = 2;
+    int32 pos = 3;
 }
 
 enum OperatType {
@@ -139,7 +141,8 @@ message EatReq
 
 message EatRsp
 {
-    Eat eat = 1;
+    bool ok = 1;
+    Eat eat = 2;
 }
 
 message PongReq
@@ -157,10 +160,11 @@ enum GangType {
     MingGang = 0;
     BuGang = 1;
     AnGang = 2;
+    SpecialGang = 3;
 }
 
 message Gang {
-    int32 card = 1;
+    repeated int32 cards = 1;
     GangType type = 2;
 }
 
@@ -183,12 +187,17 @@ message DropRsp
     int32 dis_card = 3;
 }
 
-message UserJoinTableMsg
+message Seat
 {
-    uint32 tid = 1;
     uint64 uid = 2;
     string name = 3;
     int32 pos = 4;
+}
+
+message UserJoinTableMsg
+{
+    uint32 tid = 1;
+    repeated Seat seats = 2;
 }
 
 message Wave
@@ -237,6 +246,42 @@ message TableOperatMsg
     uint64 uid = 1;
     TableOperat type = 2;
     bool OK = 3;
+}
+
+message PreWinCard
+{
+    int32 card = 1;
+    string name = 2;
+}
+
+message PosMsg
+{
+    uint64 uid = 1;
+    int32 pos = 2;
+}
+
+message Player
+{
+    uint64 uid = 1;
+    repeated int32 cards = 2;
+    repeated Wave waves = 3;
+    repeated int32 drop_cards = 4;
+    map<int32, PreWinCard> prewin_cards = 5;
+    repeated PosMsg pos = 6;
+    int32 hun_card = 7;
+    bool cancel_hu = 8;
+}
+
+message RecvorReq
+{
+
+}
+
+message RecvorRsp
+{
+    uint32 err_code = 1;
+    string err_msg = 2;
+    repeated Player players = 3;
 }
 
 message GetAreaReq

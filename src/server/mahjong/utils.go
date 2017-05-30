@@ -7,6 +7,22 @@ import (
 	"math/rand"
 )
 
+type DisCardType int32
+
+const (
+	DisCard_Normal   = 0
+	DisCard_Mo       = 1
+	DisCard_BuGang   = 2
+	DisCard_HaiDi    = 3
+	DisCard_SelfGang = 4
+)
+
+type DisCard struct {
+	Card    int32
+	DisType DisCardType
+	FromUid uint64
+}
+
 var (
 	CardsMap = map[int32]string{101: "一万", 102: "二万", 103: "三万", 104: "四万", 105: "五万", 106: "六万", 107: "七万", 108: "八万",
 		109: "九万",
@@ -98,6 +114,15 @@ func SeparateCards(cards []int32, hun_card int32) [5][]int32 {
 	return result
 }
 
+func IsTingCardNum(num int) bool {
+	for i := 0; i <= 4; i++ {
+		if num == i * 3 + 1 {
+			return true
+		}
+	}
+	return false
+}
+
 func SortCards(cards []int32, hun_card int32) {
 	sort.Slice(cards, func(i, j int) bool {
 		if cards[i] == hun_card {
@@ -147,11 +172,23 @@ func DropSingle(separate_result [5][]int32) int32 {
 	return 0
 }
 
+func AllCardsIsHun(cards []int32, hun_card int32) bool {
+	for _, card := range cards {
+		if card != hun_card {
+			return false
+		}
+	}
+	return true
+}
+
 func DropRand(cards []int32, hun_card int32) int32 {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	all_hun := AllCardsIsHun(cards, hun_card)
 	for {
 		index := r.Intn(len(cards))
-		if hun_card != cards[index] {
+		if all_hun {
+			return cards[index]
+		} else if hun_card != cards[index] {
 			return cards[index]
 		}
 	}
