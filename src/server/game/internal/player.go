@@ -11,6 +11,7 @@ import (
 	"server/proto"
 	"sort"
 	"time"
+	"strings"
 )
 
 type Player struct {
@@ -73,7 +74,13 @@ func (p *Player) String() string {
 			}
 		}
 		mahjong.SortCards(keys, 0)
-		str = str + fmt.Sprintf("/听%v", mahjong.CardsStr(keys))
+		str = str + "听["
+		tmp := []string{}
+		for _, key := range keys {
+			tmp = append(tmp, fmt.Sprintf("%v", p.prewin_cards[key].(*Ting).Info()))
+		}
+		str = str + strings.Join(tmp, ",")
+		str = str + "]"
 	}
 	if p.win_card != 0 {
 		str = str + "->" + mahjong.CardStr(p.win_card) + " 胡牌!"

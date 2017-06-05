@@ -3,6 +3,8 @@ package internal
 import (
 	"reflect"
 	"fmt"
+	"server/mahjong"
+	"strings"
 )
 
 type Ting struct {
@@ -17,6 +19,8 @@ type Ting struct {
 	duidao bool
 	shunzi bool
 	quanqiuren bool
+	tengkong bool
+	piaojiang bool
 	dragon_num int
 	need_hun_num int
 	need_hun_list []NeedHun
@@ -24,7 +28,7 @@ type Ting struct {
 
 type NeedHun struct {
 	num int
-	card int32
+	cards []int32
 	eye bool
 }
 
@@ -46,13 +50,48 @@ func Minting() *Ting {
 	return t
 }
 
+func (m *NeedHun) String() string {
+	return fmt.Sprintf("num:%v, cards:%v, eye:%v", m.num, mahjong.CardsStr(m.cards), m.eye)
+}
+
 func (m *Ting) String() string {
 	return fmt.Sprintf("%v", m.need_hun_num)
 }
 
+func (m *Ting) Info() string {
+	if m.tengkong {
+		return "腾空"
+	}
+
+	if m.piaojiang {
+		return "飘将"
+	}
+
+	tmp := []string{}
+	for _, needHun := range m.need_hun_list {
+		tmp = append(tmp, needHun.String())
+	}
+	return fmt.Sprintf("%v:%v", mahjong.CardStr(m.card), strings.Join(tmp, ","))
+}
+
 func (m *Ting) Copy() *Ting {
 	ting := new(Ting)
+	ting.card = m.card
+	ting.pengpeng_hu = m.pengpeng_hu
+	ting.shunzi_count = m.shunzi_count
+	ting.kezi_count = m.kezi_count
+	ting.pair_7 = m.pair_7
+	ting.qingyise = m.qingyise
+	ting.dandian  = m.dandian
+	ting.kazhang = m.kazhang
+	ting.duidao = m.duidao
+	ting.shunzi = m.shunzi
+	ting.quanqiuren = m.quanqiuren
+	ting.tengkong = m.tengkong
+	ting.piaojiang = m.piaojiang
+	ting.dragon_num = m.dragon_num
 	ting.need_hun_num = m.need_hun_num
+	ting.need_hun_list = m.need_hun_list
 	return ting
 }
 
@@ -82,9 +121,18 @@ func GetMin(t1 *Ting, t2 *Ting) *Ting {
 	return t2
 }
 
-func (m *Ting) AddHun(num int, card int32, eye bool) {
+func (m *Ting) AddHunEye(num int, cards []int32) *Ting {
+	return m.AddHun(num, cards, true)
+}
+
+func (m *Ting) AddHunNoEye(num int, cards []int32) *Ting {
+	return m.AddHun(num, cards, false)
+}
+
+func (m *Ting) AddHun(num int, cards []int32, eye bool) *Ting{
 	m.need_hun_num = m.need_hun_num + num
-	m.need_hun_list = append(m.need_hun_list, NeedHun{num:num, card:card, eye:eye})
+	m.need_hun_list = append(m.need_hun_list, NeedHun{num:num, cards:cards, eye:eye})
+	return m
 }
 
 func (m *Ting) AddNum(num int) *Ting {

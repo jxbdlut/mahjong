@@ -292,14 +292,6 @@ func (t *Table) GetModNeedNum(len int, eye bool) *Ting {
 	return ting
 }
 
-func min(a int, b int) int {
-	if a < b {
-		return a
-	} else {
-		return b
-	}
-}
-
 func (t *Table) Check3Combine(card1 int32, card2 int32, card3 int32) bool {
 	m1, m2, m3 := card1/100, card2/100, card3/100
 
@@ -364,23 +356,23 @@ func (t *Table) GetNeedHunInSub(sub_cards []int32, min_need *Ting, max_need *Tin
 	if len_sub_cards == 0 {
 		return GetMin(min_ting, max_ting)
 	} else if len_sub_cards == 1 {
-		return GetMin(min_ting.AddNum(2), max_ting)
+		return GetMin(min_ting.AddHunNoEye(2, []int32{sub_cards[0]}), max_ting)
 	} else if len_sub_cards == 2 {
 		m, v0, v1 := sub_cards[0]/100, sub_cards[0]%10, sub_cards[1]%10
 		if m == 4 {
 			if v0 == v1 {
-				return GetMin(min_ting.AddNum(1), max_ting)
+				return GetMin(min_ting.AddHunNoEye(1, []int32{sub_cards[0], sub_cards[1]}), max_ting)
 			}
 		} else if v1-v0 < 3 {
-			return GetMin(min_ting.AddNum(1), max_ting)
+			return GetMin(min_ting.AddHunNoEye(1, []int32{sub_cards[0], sub_cards[1]}), max_ting)
 		}
 	} else if len_sub_cards >= 3 {
 		m, v0 := sub_cards[0]/100, sub_cards[0]%10
 
 		// 第一个和后两个一铺
 		for i := 1; i < len_sub_cards; i++ {
-			ting1 := min_ting.Copy()
-			if ting1.AddTing(t.GetModNeedNum(len_sub_cards-3, false)).BiggerOrEqual(max_ting) {
+			ting1 := min_ting.Copy().AddTing(t.GetModNeedNum(len_sub_cards-3, false))
+			if ting1.BiggerOrEqual(max_ting) {
 				break
 			}
 			v1 := sub_cards[i] % 10
@@ -405,12 +397,12 @@ func (t *Table) GetNeedHunInSub(sub_cards []int32, min_need *Ting, max_need *Tin
 
 		// 第一个和第二个一铺
 		v1 := sub_cards[1] % 10
-		ting2 := min_ting.Copy()
-		if ting2.AddTing(t.GetModNeedNum(len_sub_cards-2, false)).AddNum(1).Smaller(max_ting) {
+		ting2 := min_ting.Copy().AddTing(t.GetModNeedNum(len_sub_cards-2, false))
+		if ting2.AddNum(1).Smaller(max_ting) {
 			if m == 4 {
 				if v0 == v1 {
 					tmp_cards := mahjong.Copy(sub_cards[2:])
-					max_ting = t.GetNeedHunInSub(tmp_cards, min_ting.AddNum(1), max_ting)
+					max_ting = t.GetNeedHunInSub(tmp_cards, min_ting.AddHunNoEye(1, []int32{sub_cards[0], sub_cards[1]}), max_ting)
 				}
 			} else {
 				for i := 1; i < len_sub_cards; i++ {
@@ -431,7 +423,7 @@ func (t *Table) GetNeedHunInSub(sub_cards []int32, min_need *Ting, max_need *Tin
 						tmp1, tmp2 := sub_cards[0], sub_cards[i]
 						tmp_cards := mahjong.Copy(sub_cards)
 						tmp_cards = t.Remove(tmp_cards, tmp1, tmp2, 0)
-						max_ting = t.GetNeedHunInSub(tmp_cards, min_ting.AddNum(1), max_ting)
+						max_ting = t.GetNeedHunInSub(tmp_cards, min_ting.AddHunNoEye(1, []int32{tmp1, tmp2}), max_ting)
 						if mius >= 1 {
 							break
 						}
@@ -444,7 +436,7 @@ func (t *Table) GetNeedHunInSub(sub_cards []int32, min_need *Ting, max_need *Tin
 		// 第一个自己一铺
 		if min_ting.AddTing(t.GetModNeedNum(len_sub_cards-1, false)).AddNum(2).Smaller(max_ting) {
 			tmp_cards := mahjong.Copy(sub_cards[1:])
-			max_ting = t.GetNeedHunInSub(tmp_cards, min_ting.AddNum(2), max_ting)
+			max_ting = t.GetNeedHunInSub(tmp_cards, min_ting.AddHunNoEye(2, []int32{sub_cards[0]}), max_ting)
 		}
 	}
 	return max_ting
@@ -564,9 +556,9 @@ func (t *Table) GetNeedHunInSubWithEye(cards []int32, max_need *Ting) *Ting {
 			tmp_cards := mahjong.Copy(cards_copy)
 			if t.rule.IsJiang(cards_copy[i]) {
 				tmp_cards = t.Remove(tmp_cards, cards_copy[i], 0, 0)
-				min_ting = GetMin(min_ting, t.GetNeedHunInSub(tmp_cards, Minting(), MaxTing()).Copy().AddNum(1))
+				min_ting = GetMin(min_ting, t.GetNeedHunInSub(tmp_cards, Minting(), MaxTing()).Copy().AddHunEye(1, []int32{cards_copy[i]}))
 			} else {
-				min_ting = GetMin(min_ting, t.GetNeedHunInSub(tmp_cards, Minting(), MaxTing()).Copy().AddNum(2))
+				min_ting = GetMin(min_ting, t.GetNeedHunInSub(tmp_cards, Minting(), MaxTing()).Copy().AddHunEye(2, []int32{}))
 			}
 		} else {
 			if i+2 == len_cards || cards_copy[i]%10 != cards_copy[i+2]%10 {
@@ -575,17 +567,17 @@ func (t *Table) GetNeedHunInSubWithEye(cards []int32, max_need *Ting) *Ting {
 					tmp_cards = t.Remove(tmp_cards, cards_copy[i], cards_copy[i+1], 0)
 					min_ting = GetMin(min_ting, t.GetNeedHunInSub(tmp_cards, Minting(), MaxTing()))
 				} else {
-					min_ting = GetMin(min_ting, t.GetNeedHunInSub(tmp_cards, Minting(), MaxTing()).Copy().AddNum(2))
+					min_ting = GetMin(min_ting, t.GetNeedHunInSub(tmp_cards, Minting(), MaxTing()).Copy().AddHunEye(2, []int32{}))
 				}
 			}
 			if cards_copy[i]%10 != cards_copy[i+1]%10 {
 				tmp_cards := mahjong.Copy(cards_copy)
 				if t.rule.IsJiang(tmp_cards[i]) {
 					tmp_cards = t.Remove(tmp_cards, cards_copy[i], 0, 0)
-					min_ting = GetMin(min_ting, t.GetNeedHunInSub(tmp_cards, Minting(), MaxTing()).AddNum(1))
+					min_ting = GetMin(min_ting, t.GetNeedHunInSub(tmp_cards, Minting(), MaxTing()).AddHunEye(1, []int32{tmp_cards[i]}))
 				} else if t.rule.IsJiang(tmp_cards[i+1]) {
 					tmp_cards = t.Remove(tmp_cards, cards_copy[i+1], 0, 0)
-					min_ting = GetMin(min_ting, t.GetNeedHunInSub(tmp_cards, Minting(), MaxTing()).AddNum(1))
+					min_ting = GetMin(min_ting, t.GetNeedHunInSub(tmp_cards, Minting(), MaxTing()).AddHunEye(1, []int32{tmp_cards[i]}))
 				}
 			}
 		}
@@ -950,14 +942,14 @@ func (t *Table) GetTingCards(p *Player) map[int32]interface{} {
 		need_hun_with_eye_arr = append(need_hun_with_eye_arr, t.GetNeedHunInSubWithEye(cards, MaxTing()))
 	}
 	need_hun, index := t.GetBestComb(separate_results, need_hun_arr, need_hun_with_eye_arr)
-	log.Debug("uid:%v separate_results:%v", p.uid, separate_results)
-	log.Debug("uid:%v need_hun_arr:%v, need_hun_with_eye_arr:%v index:%v", p.uid, need_hun_arr, need_hun_with_eye_arr, index)
+	log.Debug("uid:%v, separate_results:%v", p.uid, separate_results)
+	log.Debug("uid:%v, need_hun_arr:%v, need_hun_with_eye_arr:%v index:%v", p.uid, need_hun_arr, need_hun_with_eye_arr, index)
 	if cur_hun.Copy().SubTing(need_hun).BiggerOrEqualNum(2) {
-		result[1] = 1
+		result[1] = &Ting{tengkong:true}
 		return result
 	}
 	if cur_hun.Copy().SubTing(t.SumNeedHun(need_hun_arr)).BiggerNum(0) {
-		result[2] = 2
+		result[2] = &Ting{piaojiang:true}
 	}
 	if need_hun.Bigger(cur_hun.Copy().AddNum(1)) {
 		return result
@@ -969,7 +961,7 @@ func (t *Table) GetTingCards(p *Player) map[int32]interface{} {
 			if ok := result[card]; ok != nil {
 				continue
 			}
-			if ok := result[2]; ok != nil && need_hun_arr[i].EqualNum(0) && !t.HasDuiJiang(separate_results[i+1]){
+			if ok := result[2]; ok != nil && need_hun_arr[i].EqualNum(0) && !t.HasDuiJiang(separate_results[i+1]) {
 				continue
 			}
 			tmp_cards := mahjong.Copy(separate_results[i+1])
@@ -977,7 +969,8 @@ func (t *Table) GetTingCards(p *Player) map[int32]interface{} {
 			mahjong.SortCards(tmp_cards, t.hun_card)
 			tmp_ting := need_hun_with_eye_arr[i].Copy()
 			if t.IsHu(tmp_cards, tmp_ting.SubNum(1)) {
-				result[card] = card
+				tmp_ting.card = card
+				result[card] = tmp_ting
 			}
 		}
 		for j := 0; j < 4; j++ {
@@ -991,9 +984,10 @@ func (t *Table) GetTingCards(p *Player) map[int32]interface{} {
 					tmp_cards := mahjong.Copy(separate_results[j+1])
 					tmp_cards = append(tmp_cards, card)
 					mahjong.SortCards(tmp_cards, t.hun_card)
-					tmp_ting := need_hun_arr[j].Copy()
-					if t.GetNeedHunInSub(tmp_cards, Minting(), MaxTing()).SmallerOrEqual(tmp_ting.SubNum(1)) {
-						result[card] = card
+					ting := t.GetNeedHunInSub(tmp_cards, Minting(), MaxTing())
+					if ting.SmallerOrEqual(need_hun_arr[j].Copy().SubNum(1)) {
+						ting.card = card
+						result[card] = ting
 					}
 				}
 			}
