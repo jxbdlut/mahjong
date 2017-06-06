@@ -1,10 +1,10 @@
 package mahjong
 
 import (
-	"strings"
-	"sort"
-	"time"
 	"math/rand"
+	"sort"
+	"strings"
+	"time"
 )
 
 type DisCardType int32
@@ -31,7 +31,7 @@ var (
 		301: "一条", 302: "二条", 303: "三条", 304: "四条", 305: "五条", 306: "六条", 307: "七条", 308: "八条",
 		309: "九条",
 		401: "東", 402: "西", 403: "南", 404: "北", 405: "中", 406: "發", 407: "白",
-		1: "腾空", 2: "飘将"}
+		1: "腾空", 2: "飘将", 3: "飘门"}
 )
 
 func CardsStr(cards []int32) string {
@@ -74,7 +74,6 @@ func Index(cards []int32, card int32) int32 {
 	return -1
 }
 
-
 func Copy(cards []int32) []int32 {
 	cards_copy := make([]int32, len(cards))
 	copy(cards_copy, cards)
@@ -116,7 +115,7 @@ func SeparateCards(cards []int32, hun_card int32) [5][]int32 {
 
 func IsTingCardNum(num int) bool {
 	for i := 0; i <= 4; i++ {
-		if num == i * 3 + 1 {
+		if num == i*3+1 {
 			return true
 		}
 	}

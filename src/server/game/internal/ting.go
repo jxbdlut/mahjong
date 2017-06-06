@@ -1,57 +1,62 @@
 package internal
 
 import (
-	"reflect"
 	"fmt"
+	"reflect"
 	"server/mahjong"
 	"strings"
 )
 
 type Ting struct {
-	card int32
-	pengpeng_hu bool
-	shunzi_count int
-	kezi_count int
-	pair_7 int
-	qingyise bool
-	dandian  bool
-	kazhang bool
-	duidao bool
-	shunzi bool
-	quanqiuren bool
-	tengkong bool
-	piaojiang bool
-	dragon_num int
-	need_hun_num int
-	need_hun_list []NeedHun
+	table         *Table
+	card          int32
+	pengpeng_hu   bool
+	shunzi_count  int
+	kezi_count    int
+	pair_7        int
+	qingyise      bool
+	dandian       bool
+	kazhang       bool
+	duidao        bool
+	shunzi        bool
+	quanqiuren    bool
+	tengkong      bool
+	piaojiang     bool
+	piaomen       []int32
+	dragon_num    int
+	need_hun_num  int
+	need_hun_list []*NeedHun
 }
 
 type NeedHun struct {
-	num int
+	num   int
 	cards []int32
-	eye bool
+	eye   bool
 }
 
-func NewTing(num int) *Ting {
+func NewTing(num int, table *Table) *Ting {
 	t := new(Ting)
+	t.table = table
 	t.need_hun_num = num
 	return t
 }
 
-func MaxTing() *Ting {
+func MaxTing(table *Table) *Ting {
 	t := new(Ting)
+	t.table = table
 	t.need_hun_num = 5
 	return t
 }
 
-func Minting() *Ting {
+func Minting(table *Table) *Ting {
 	t := new(Ting)
+	t.table = table
 	t.need_hun_num = 0
 	return t
 }
 
 func (m *NeedHun) String() string {
-	return fmt.Sprintf("num:%v, cards:%v, eye:%v", m.num, mahjong.CardsStr(m.cards), m.eye)
+	return fmt.Sprintf("cards:%v", mahjong.CardsStr(m.cards))
 }
 
 func (m *Ting) String() string {
@@ -67,6 +72,10 @@ func (m *Ting) Info() string {
 		return "飘将"
 	}
 
+	if len(m.piaomen) > 0 {
+		return fmt.Sprintf("飘门:%v", mahjong.CardsStr(m.piaomen))
+	}
+
 	tmp := []string{}
 	for _, needHun := range m.need_hun_list {
 		tmp = append(tmp, needHun.String())
@@ -74,15 +83,52 @@ func (m *Ting) Info() string {
 	return fmt.Sprintf("%v:%v", mahjong.CardStr(m.card), strings.Join(tmp, ","))
 }
 
+func (m *Ting) HasJiang(needHun *NeedHun) bool {
+	for _, card := range needHun.cards {
+		if m.table.rule.IsJiang(card) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Ting) IsPiaoMen() bool {
+	num_flag := false
+	jiang_flag := false
+	jiang := int32(0)
+	for _, needHun := range m.need_hun_list {
+		if needHun.eye && needHun.num == 1 {
+			jiang = needHun.cards[0]
+		}
+	}
+
+	for _, needHun := range m.need_hun_list {
+		if needHun.eye == false && mahjong.Contain(needHun.cards, m.card) && needHun.num == 1 {
+			return true
+		}
+		if mahjong.Contain(needHun.cards, m.card) && mahjong.Contain(needHun.cards, jiang) {
+			return true
+		}
+		if needHun.num == 2 {
+			num_flag = true
+		}
+		if mahjong.Contain(needHun.cards, m.card) && m.HasJiang(needHun) {
+			jiang_flag = true
+		}
+	}
+	return num_flag && jiang_flag
+}
+
 func (m *Ting) Copy() *Ting {
 	ting := new(Ting)
+	ting.table = m.table
 	ting.card = m.card
 	ting.pengpeng_hu = m.pengpeng_hu
 	ting.shunzi_count = m.shunzi_count
 	ting.kezi_count = m.kezi_count
 	ting.pair_7 = m.pair_7
 	ting.qingyise = m.qingyise
-	ting.dandian  = m.dandian
+	ting.dandian = m.dandian
 	ting.kazhang = m.kazhang
 	ting.duidao = m.duidao
 	ting.shunzi = m.shunzi
@@ -129,9 +175,9 @@ func (m *Ting) AddHunNoEye(num int, cards []int32) *Ting {
 	return m.AddHun(num, cards, false)
 }
 
-func (m *Ting) AddHun(num int, cards []int32, eye bool) *Ting{
+func (m *Ting) AddHun(num int, cards []int32, eye bool) *Ting {
 	m.need_hun_num = m.need_hun_num + num
-	m.need_hun_list = append(m.need_hun_list, NeedHun{num:num, cards:cards, eye:eye})
+	m.need_hun_list = append(m.need_hun_list, &NeedHun{num: num, cards: cards, eye: eye})
 	return m
 }
 
