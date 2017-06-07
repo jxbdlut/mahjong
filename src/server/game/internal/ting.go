@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"reflect"
 	"server/mahjong"
-	"strings"
 )
 
 type Ting struct {
 	table         *Table
 	card          int32
-	pengpeng_hu   bool
 	shunzi_count  int
 	kezi_count    int
-	pair_7        int
+	pengpeng_hu   bool
+	pair_7        bool
 	qingyise      bool
+	jiangyise     bool
 	dandian       bool
 	kazhang       bool
 	duidao        bool
@@ -22,7 +22,7 @@ type Ting struct {
 	quanqiuren    bool
 	tengkong      bool
 	piaojiang     bool
-	piaomen       []int32
+	piaomen       bool
 	dragon_num    int
 	need_hun_num  int
 	need_hun_list []*NeedHun
@@ -56,7 +56,7 @@ func Minting(table *Table) *Ting {
 }
 
 func (m *NeedHun) String() string {
-	return fmt.Sprintf("cards:%v", mahjong.CardsStr(m.cards))
+	return fmt.Sprintf("[num:%v, eye:%v, cards:%v]", m.num, m.eye, mahjong.CardsStr(m.cards))
 }
 
 func (m *Ting) String() string {
@@ -72,15 +72,15 @@ func (m *Ting) Info() string {
 		return "飘将"
 	}
 
-	if len(m.piaomen) > 0 {
-		return fmt.Sprintf("飘门:%v", mahjong.CardsStr(m.piaomen))
+	if m.piaomen {
+		return "飘门"
 	}
 
 	tmp := []string{}
 	for _, needHun := range m.need_hun_list {
 		tmp = append(tmp, needHun.String())
 	}
-	return fmt.Sprintf("%v:%v", mahjong.CardStr(m.card), strings.Join(tmp, ","))
+	return fmt.Sprintf("%v", mahjong.CardStr(m.card))
 }
 
 func (m *Ting) HasJiang(needHun *NeedHun) bool {
@@ -109,10 +109,10 @@ func (m *Ting) IsPiaoMen() bool {
 		if mahjong.Contain(needHun.cards, m.card) && mahjong.Contain(needHun.cards, jiang) {
 			return true
 		}
-		if needHun.num == 2 {
+		if needHun.eye == true && needHun.num == 2 {
 			num_flag = true
 		}
-		if mahjong.Contain(needHun.cards, m.card) && m.HasJiang(needHun) {
+		if needHun.eye == false && m.HasJiang(needHun) && mahjong.Contain(needHun.cards, m.card) {
 			jiang_flag = true
 		}
 	}
@@ -173,6 +173,16 @@ func (m *Ting) AddHunEye(num int, cards []int32) *Ting {
 
 func (m *Ting) AddHunNoEye(num int, cards []int32) *Ting {
 	return m.AddHun(num, cards, false)
+}
+
+func (m *Ting) AddKezi(num int) *Ting {
+	m.kezi_count = m.kezi_count + num
+	return m
+}
+
+func (m *Ting) AddShunzi(num int) *Ting {
+	m.shunzi_count = m.shunzi_count + num
+	return m
 }
 
 func (m *Ting) AddHun(num int, cards []int32, eye bool) *Ting {

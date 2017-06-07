@@ -10,8 +10,8 @@ import (
 	"server/mahjong"
 	"server/proto"
 	"sort"
-	"time"
 	"strings"
+	"time"
 )
 
 type Player struct {
