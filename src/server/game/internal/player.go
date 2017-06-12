@@ -128,6 +128,29 @@ func (p *Player) FeedCard(cards []int32) {
 	p.separate_result = mahjong.SeparateCards(p.cards, p.table.hun_card)
 }
 
+func (p *Player) isNotPengPengHu(need_hun_arr []*Ting) bool {
+	for _, wave := range p.waves {
+		if wave.WaveType == proto.Wave_EatWave {
+			return true
+		}
+	}
+
+	shunzi_count := 0
+	for _, ting := range need_hun_arr {
+		if ting.shunzi_count > 0 {
+			shunzi_count = shunzi_count + 1
+		}
+	}
+	if shunzi_count > 1 {
+		return true
+	}
+	return false
+}
+
+func (p *Player) isQingYiSe() bool {
+	return true
+}
+
 func (p *Player) AddGangWave(cards []int32, t proto.GangType) {
 	if t == proto.GangType_BuGang {
 		for _, wave := range p.waves {
