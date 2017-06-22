@@ -1,4 +1,4 @@
-package mahjong
+package utils
 
 import (
 	"math/rand"
@@ -80,6 +80,41 @@ func Copy(cards []int32) []int32 {
 	return cards_copy
 }
 
+func SearchRange(cards []int32) (int32, int32) {
+	m := cards[0] / 100
+	begin := int32(100*m + 10)
+	end := int32(100 * m)
+
+	if len(cards) == 2 && cards[0] == cards[1] {
+		return cards[0], cards[1]
+	}
+
+	for _, card := range cards {
+		if card < begin {
+			begin = card
+		}
+		if card > end {
+			end = card
+		}
+	}
+	if m == 4 {
+		return begin, end
+	}
+	if begin-2 < 100*m+1 {
+		begin = 100*m + 1
+	} else {
+		begin = begin - 2
+	}
+
+	if end+2 > 100*m+9 {
+		end = 100*m + 9
+	} else {
+		end = end + 2
+	}
+
+	return begin, end
+}
+
 func DelCard(cards []int32, card1 int32, card2 int32, card3 int32) []int32 {
 	index := Index(cards, card1)
 	if index != -1 {
@@ -111,6 +146,14 @@ func SeparateCards(cards []int32, hun_card int32) [5][]int32 {
 		SortCards(cards, hun_card)
 	}
 	return result
+}
+
+func Min(a int, b int) int {
+	if a < b {
+		return a
+	} else {
+		return b
+	}
 }
 
 func IsTingCardNum(num int) bool {

@@ -8,7 +8,7 @@ import (
 	"net"
 	"server/proto"
 	"server/userdata"
-	"server/game/area"
+	"server/game/area_manager"
 )
 
 const (
@@ -64,7 +64,7 @@ func handlerCreateTable(args []interface{}) {
 	tid := genTableId()
 	log.Debug("uid:%v, create table, tid:%v, seq:%v", uid, tid, seq)
 	table := NewTable(tid, proto.CreateTableReq_TableType(req.Type))
-	table.rule = area.GetArea(uint16(req.Area))
+	table.rule = area_manager.GetArea(uint16(req.Area))
 	log.Debug("tid:%v, rule:%v", tid, reflect.TypeOf(table.rule))
 	a.SetUserData(&userdata.UserData{
 		Uid: uid,

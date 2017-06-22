@@ -3,7 +3,7 @@ package internal
 import (
 	"errors"
 	"reflect"
-	"server/mahjong"
+	"server/utils"
 	"server/proto"
 )
 
@@ -85,11 +85,11 @@ func (a *BaseRobot) Draw(req *proto.DrawReq, rsp *proto.DrawRsp) bool {
 }
 
 func (a *BaseRobot) Drop(req *proto.DropReq, rsp *proto.DropRsp) bool {
-	cards_copy := mahjong.Copy(a.player.cards)
-	separate_result := mahjong.SeparateCards(cards_copy, a.player.table.hun_card)
-	discard := mahjong.DropSingle(separate_result)
+	cards_copy := utils.Copy(a.player.cards)
+	separate_result := utils.SeparateCards(cards_copy, a.player.table.hun_card)
+	discard := utils.DropSingle(separate_result)
 	if discard == 0 {
-		discard = mahjong.DropRand(cards_copy, a.player.table.hun_card)
+		discard = utils.DropRand(cards_copy, a.player.table.hun_card)
 	}
 	rsp.DisCard = discard
 	return true

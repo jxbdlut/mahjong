@@ -15,7 +15,7 @@ import (
 	"os/signal"
 	"reflect"
 	"server/conf"
-	"server/mahjong"
+	"server/utils"
 	"server/proto"
 	"strconv"
 	"sync/atomic"
@@ -161,7 +161,7 @@ func HandlerOperatReq(args []interface{}) {
 		a.Drop(req.DropReq, rsp.DropRsp)
 	}
 	log.Release("uid:%v, %v, %v", a.uid, req.Info(), rsp.Info())
-	log.Release("uid:%v, 手牌:%v", a.uid, mahjong.CardsStr(a.cards))
+	log.Release("uid:%v, 手牌:%v", a.uid, utils.CardsStr(a.cards))
 	a.WriteMsg(rsp, nil, seq)
 }
 
@@ -227,13 +227,13 @@ func (a *agent) Deal(req *proto.DealReq, rsp *proto.DealRsp) bool {
 	}
 	a.fan_card = req.FanCard
 	a.hun_card = req.HunCard
-	a.separate_result = mahjong.SeparateCards(a.cards, a.hun_card)
+	a.separate_result = utils.SeparateCards(a.cards, a.hun_card)
 	return true
 }
 
 func (a *agent) DelGang(card int32) {
 	for i := 0; i < 4; i++ {
-		index := mahjong.Index(a.cards, card)
+		index := utils.Index(a.cards, card)
 		if index != -1 {
 			a.cards = append(a.cards[:index], a.cards[index+1:]...)
 		}
@@ -241,26 +241,26 @@ func (a *agent) DelGang(card int32) {
 }
 
 func (a *agent) Drop(req *proto.DropReq, rsp *proto.DropRsp) bool {
-	a.separate_result = mahjong.SeparateCards(a.cards, a.hun_card)
-	discard := mahjong.DropSingle(a.separate_result)
+	a.separate_result = utils.SeparateCards(a.cards, a.hun_card)
+	discard := utils.DropSingle(a.separate_result)
 	if discard == 0 {
-		discard = mahjong.DropRand(a.cards, a.hun_card)
+		discard = utils.DropRand(a.cards, a.hun_card)
 	}
-	a.cards = mahjong.DelCard(a.cards, discard, 0, 0)
+	a.cards = utils.DelCard(a.cards, discard, 0, 0)
 	rsp.DisCard = discard
 	return true
 }
 
 func (a *agent) Draw(req *proto.DrawReq, rsp *proto.DrawRsp) bool {
 	a.cards = append(a.cards, req.Card)
-	a.separate_result = mahjong.SeparateCards(a.cards, a.hun_card)
-	mahjong.SortCards(a.cards, a.hun_card)
+	a.separate_result = utils.SeparateCards(a.cards, a.hun_card)
+	utils.SortCards(a.cards, a.hun_card)
 	return true
 }
 
 func (a *agent) Eat(req *proto.EatReq, rsp *proto.EatRsp) bool {
 	eat := req.Eat[0]
-	a.cards = mahjong.DelCard(a.cards, eat.HandCard[0], eat.HandCard[1], 0)
+	a.cards = utils.DelCard(a.cards, eat.HandCard[0], eat.HandCard[1], 0)
 	rsp.Eat = eat
 	rsp.Ok = true
 	return true
@@ -268,7 +268,7 @@ func (a *agent) Eat(req *proto.EatReq, rsp *proto.EatRsp) bool {
 
 func (a *agent) Pong(req *proto.PongReq, rsp *proto.PongRsp) bool {
 	card := req.Card
-	a.cards = mahjong.DelCard(a.cards, card, card, 0)
+	a.cards = utils.DelCard(a.cards, card, card, 0)
 	rsp.Card, rsp.Ok = card, true
 	return true
 }
@@ -278,14 +278,14 @@ func (a *agent) Gang(req *proto.GangReq, rsp *proto.GangRsp) bool {
 	card := gang.Cards[0]
 	switch gang.Type {
 	case proto.GangType_MingGang:
-		a.cards = mahjong.DelCard(a.cards, card, card, card)
+		a.cards = utils.DelCard(a.cards, card, card, card)
 	case proto.GangType_BuGang:
-		a.cards = mahjong.DelCard(a.cards, card, 0, 0)
+		a.cards = utils.DelCard(a.cards, card, 0, 0)
 	case proto.GangType_AnGang:
-		a.cards = mahjong.DelCard(a.cards, card, card, card)
-		a.cards = mahjong.DelCard(a.cards, card, 0, 0)
+		a.cards = utils.DelCard(a.cards, card, card, card)
+		a.cards = utils.DelCard(a.cards, card, 0, 0)
 	case proto.GangType_SpecialGang:
-		a.cards = mahjong.DelCard(a.cards, card, 0, 0)
+		a.cards = utils.DelCard(a.cards, card, 0, 0)
 	}
 	rsp.Ok = true
 	rsp.Gang = req.Gang[0]

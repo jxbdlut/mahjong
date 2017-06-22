@@ -1,13 +1,14 @@
-package internal
+package default_rule
 
 import (
 	"fmt"
 	"reflect"
 	"server/utils"
+	"server/game/area"
 )
 
 type Ting struct {
-	table         *Table
+	rule          area.Rule
 	card          int32
 	shunzi_count  int
 	kezi_count    int
@@ -34,23 +35,23 @@ type NeedHun struct {
 	eye   bool
 }
 
-func NewTing(num int, table *Table) *Ting {
+func NewTing(num int, rule area.Rule) *Ting {
 	t := new(Ting)
-	t.table = table
+	t.rule = rule
 	t.need_hun_num = num
 	return t
 }
 
-func MaxTing(table *Table) *Ting {
+func MaxTing(rule area.Rule) *Ting {
 	t := new(Ting)
-	t.table = table
+	t.rule = rule
 	t.need_hun_num = 5
 	return t
 }
 
-func Minting(table *Table) *Ting {
+func Minting(rule area.Rule) *Ting {
 	t := new(Ting)
-	t.table = table
+	t.rule = rule
 	t.need_hun_num = 0
 	return t
 }
@@ -85,7 +86,7 @@ func (m *Ting) Info() string {
 
 func (m *Ting) HasJiang(needHun *NeedHun) bool {
 	for _, card := range needHun.cards {
-		if m.table.rule.IsJiang(card) {
+		if m.rule.IsJiang(card) {
 			return true
 		}
 	}
@@ -121,7 +122,7 @@ func (m *Ting) IsPiaoMen() bool {
 
 func (m *Ting) Copy() *Ting {
 	ting := new(Ting)
-	ting.table = m.table
+	//ting.table = m.table
 	ting.card = m.card
 	ting.pengpeng_hu = m.pengpeng_hu
 	ting.shunzi_count = m.shunzi_count

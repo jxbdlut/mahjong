@@ -7,7 +7,7 @@ import (
 	"github.com/jxbdlut/leaf/log"
 	"net"
 	"reflect"
-	"server/mahjong"
+	"server/utils"
 	"server/proto"
 	"sort"
 	"strings"
@@ -65,15 +65,15 @@ func (p *Player) String() string {
 			return p.cards[i] < p.cards[j]
 		}
 	})
-	str := fmt.Sprintf("uid:%v, %v/%v/[%v]", p.uid, mahjong.CardsStr(p.cards), proto.WavesStr(p.waves), mahjong.CardStr(p.table.hun_card))
-	if p.win_card != 0 || len(p.prewin_cards) > 0 && mahjong.IsTingCardNum(len(p.cards)) {
+	str := fmt.Sprintf("uid:%v, %v/%v/[%v]", p.uid, utils.CardsStr(p.cards), proto.WavesStr(p.waves), utils.CardStr(p.table.hun_card))
+	if p.win_card != 0 || len(p.prewin_cards) > 0 && utils.IsTingCardNum(len(p.cards)) {
 		keys := []int32{}
 		for key := range p.prewin_cards {
 			if key != 0 {
 				keys = append(keys, key)
 			}
 		}
-		mahjong.SortCards(keys, 0)
+		utils.SortCards(keys, 0)
 		str = str + "听["
 		tmp := []string{}
 		for _, key := range keys {
@@ -83,12 +83,12 @@ func (p *Player) String() string {
 		str = str + "]"
 	}
 	if p.win_card != 0 {
-		str = str + "->" + mahjong.CardStr(p.win_card) + " 胡牌!"
+		str = str + "->" + utils.CardStr(p.win_card) + " 胡牌!"
 	}
 	return str
 }
 
-func (p *Player) GetInfo() *proto.Player {
+func (p *Player) GetProtoPlayer() *proto.Player {
 	player := &proto.Player{}
 	player.Cards = append(player.Cards, p.cards...)
 	player.Uid = p.uid
@@ -124,8 +124,8 @@ func (p *Player) Clear() {
 func (p *Player) FeedCard(cards []int32) {
 	p.Operat()
 	p.cards = append(p.cards, cards...)
-	mahjong.SortCards(p.cards, p.table.hun_card)
-	p.separate_result = mahjong.SeparateCards(p.cards, p.table.hun_card)
+	utils.SortCards(p.cards, p.table.hun_card)
+	p.separate_result = utils.SeparateCards(p.cards, p.table.hun_card)
 }
 
 func (p *Player) isNotPengPengHu(need_hun_arr []*Ting) bool {
@@ -197,7 +197,7 @@ func (p *Player) DelCards(cards []int32) {
 			p.cards = append(p.cards[:index], p.cards[index+1:]...)
 		}
 	}
-	p.separate_result = mahjong.SeparateCards(p.cards, p.table.hun_card)
+	p.separate_result = utils.SeparateCards(p.cards, p.table.hun_card)
 }
 
 func (p *Player) DelCard(card int32) {
@@ -207,8 +207,8 @@ func (p *Player) DelCard(card int32) {
 			break
 		}
 	}
-	p.separate_result = mahjong.SeparateCards(p.cards, p.table.hun_card)
-	p.prewin_cards = p.table.GetTingCards(p)
+	p.separate_result = utils.SeparateCards(p.cards, p.table.hun_card)
+	p.prewin_cards = p.table.rule.GetTingCards(p.GetProtoPlayer())
 	log.Release("%v", p)
 }
 
@@ -234,7 +234,7 @@ func (p *Player) Deal() {
 }
 
 // card为零的情况是为了防止吃或者碰之后出错，要随机出一张牌
-func (p *Player) Drop(disCard mahjong.DisCard) mahjong.DisCard {
+func (p *Player) Drop(disCard utils.DisCard) utils.DisCard {
 	operatMsg := proto.NewOperatMsg()
 	req := proto.NewOperatReq()
 	req.Type = proto.OperatType_DropOperat
@@ -242,7 +242,7 @@ func (p *Player) Drop(disCard mahjong.DisCard) mahjong.DisCard {
 	p.CanHu(disCard, req)
 	if disCard.Card == 0 {
 		disCard.FromUid = p.uid
-		disCard.DisType = mahjong.DisCard_Normal
+		disCard.DisType = utils.DisCard_Normal
 		disCard.Card = p.cards[len(p.cards)-1]
 		operatMsg.Type = operatMsg.Type | proto.OperatType_DropOperat
 		operatMsg.Drop.DisCard = disCard.Card
@@ -269,14 +269,14 @@ func (p *Player) Drop(disCard mahjong.DisCard) mahjong.DisCard {
 		p.Gang(result.(*proto.GangRsp).Gang.Cards, result.(*proto.GangRsp).Gang.Type)
 		if result.(*proto.GangRsp).Gang.Type == proto.GangType_BuGang {
 			disCard.Card = result.(*proto.GangRsp).Gang.Cards[0]
-			disCard.DisType = mahjong.DisCard_BuGang
+			disCard.DisType = utils.DisCard_BuGang
 			disCard.FromUid = p.uid
 			if p.table.CheckHu(disCard) {
 				disCard.Card = 0
 				return disCard
 			}
 		}
-		return p.Draw(mahjong.DisCard_SelfGang)
+		return p.Draw(utils.DisCard_SelfGang)
 	case proto.OperatType_DropOperat:
 		disCard.Card = result.(*proto.DropRsp).DisCard
 		p.DelCard(disCard.Card)
@@ -284,10 +284,10 @@ func (p *Player) Drop(disCard mahjong.DisCard) mahjong.DisCard {
 	return disCard
 }
 
-func (p *Player) Draw(cardType mahjong.DisCardType) mahjong.DisCard {
+func (p *Player) Draw(cardType utils.DisCardType) utils.DisCard {
 	card := p.table.DrawCard()
 	p.FeedCard([]int32{card})
-	disCard := mahjong.DisCard{Card: card, FromUid: p.uid, DisType: cardType}
+	disCard := utils.DisCard{Card: card, FromUid: p.uid, DisType: cardType}
 	req := proto.NewOperatReq()
 	req.Type = proto.OperatType_DrawOperat
 	req.DrawReq.Card = card
@@ -478,11 +478,11 @@ func (p *Player) ValidRsp(req *proto.OperatReq, rsp *proto.OperatRsp) (interface
 	return nil, errors.New("rsp error")
 }
 
-func (p *Player) CanHu(disCard mahjong.DisCard, req *proto.OperatReq) bool {
-	return p.table.rule.CanHu(disCard, p.GetInfo(), req)
+func (p *Player) CanHu(disCard utils.DisCard, req *proto.OperatReq) bool {
+	return p.table.rule.CanHu(disCard, p.GetProtoPlayer(), req)
 }
 
-func (p *Player) CheckHu(disCard mahjong.DisCard) bool {
+func (p *Player) CheckHu(disCard utils.DisCard) bool {
 	req := proto.NewOperatReq()
 	if p.CanHu(disCard, req) {
 		rsp, err := p.Notify(req)
@@ -523,7 +523,7 @@ func (p *Player) ValidHu(req *proto.HuReq, rsp *proto.HuRsp) bool {
 }
 
 func (p *Player) ValidDrop(card int32) bool {
-	if mahjong.Count(p.cards, card) == 0 {
+	if utils.Count(p.cards, card) == 0 {
 		return false
 	}
 	return true
@@ -563,11 +563,11 @@ func (p *Player) ValidGang(req *proto.GangReq, rsp *proto.GangRsp) bool {
 	return true
 }
 
-func (p *Player) CanEat(disCard mahjong.DisCard, req *proto.OperatReq) bool {
-	return p.table.rule.CanEat(disCard, p.GetInfo(), req)
+func (p *Player) CanEat(disCard utils.DisCard, req *proto.OperatReq) bool {
+	return p.table.rule.CanEat(disCard, p.GetProtoPlayer(), req)
 }
 
-func (p *Player) CheckEat(disCard mahjong.DisCard) (mahjong.DisCard, bool) {
+func (p *Player) CheckEat(disCard utils.DisCard) (utils.DisCard, bool) {
 	req := proto.NewOperatReq()
 	if p.CanEat(disCard, req) {
 		rsp, err := p.Notify(req)
@@ -584,7 +584,7 @@ func (p *Player) CheckEat(disCard mahjong.DisCard) (mahjong.DisCard, bool) {
 			p.Eat(result.(*proto.EatRsp).Eat)
 			p.BoardCastMsg(rsp.(*proto.OperatRsp))
 			log.Release("%v", p)
-			return p.Drop(mahjong.DisCard{Card: 0}), true
+			return p.Drop(utils.DisCard{Card: 0}), true
 		} else {
 			return disCard, false
 		}
@@ -594,18 +594,18 @@ func (p *Player) CheckEat(disCard mahjong.DisCard) (mahjong.DisCard, bool) {
 }
 
 func (p *Player) CanAnGang(req *proto.OperatReq) bool {
-	return p.table.rule.CanAnGang(p.GetInfo(), req)
+	return p.table.rule.CanAnGang(p.GetProtoPlayer(), req)
 }
 
 func (p *Player) CanBuGang(req *proto.OperatReq) bool {
-	return p.table.rule.CanBuGang(p.GetInfo(), req)
+	return p.table.rule.CanBuGang(p.GetProtoPlayer(), req)
 }
 
-func (p *Player) CanMingGang(disCard mahjong.DisCard, req *proto.OperatReq) bool {
-	return p.table.rule.CanMingGang(disCard, p.GetInfo(), req)
+func (p *Player) CanMingGang(disCard utils.DisCard, req *proto.OperatReq) bool {
+	return p.table.rule.CanMingGang(disCard, p.GetProtoPlayer(), req)
 }
 
-func (p *Player) CanGang(disCard mahjong.DisCard, req *proto.OperatReq) bool {
+func (p *Player) CanGang(disCard utils.DisCard, req *proto.OperatReq) bool {
 	if disCard.FromUid == p.uid {
 		p.CanAnGang(req)
 		p.CanBuGang(req)
@@ -615,17 +615,17 @@ func (p *Player) CanGang(disCard mahjong.DisCard, req *proto.OperatReq) bool {
 	return false
 }
 
-func (p *Player) CanPong(disCard mahjong.DisCard, req *proto.OperatReq) bool {
-	return p.table.rule.CanPong(disCard, p.GetInfo(), req)
+func (p *Player) CanPong(disCard utils.DisCard, req *proto.OperatReq) bool {
+	return p.table.rule.CanPong(disCard, p.GetProtoPlayer(), req)
 }
 
-func (p *Player) CanGangOrPong(disCard mahjong.DisCard, req *proto.OperatReq) bool {
+func (p *Player) CanGangOrPong(disCard utils.DisCard, req *proto.OperatReq) bool {
 	ret := p.CanGang(disCard, req)
 	ret = p.CanPong(disCard, req)
 	return ret
 }
 
-func (p *Player) CheckGangOrPong(disCard mahjong.DisCard) (mahjong.DisCard, bool) {
+func (p *Player) CheckGangOrPong(disCard utils.DisCard) (utils.DisCard, bool) {
 	req := proto.NewOperatReq()
 	if p.CanGangOrPong(disCard, req) {
 		p.CanEat(disCard, req)
@@ -646,17 +646,17 @@ func (p *Player) CheckGangOrPong(disCard mahjong.DisCard) (mahjong.DisCard, bool
 		case proto.OperatType_PongOperat:
 			if result.(*proto.PongRsp).Ok {
 				p.Pong(result.(*proto.PongRsp).Card)
-				return p.Drop(mahjong.DisCard{Card: 0}), true
+				return p.Drop(utils.DisCard{Card: 0}), true
 			}
 		case proto.OperatType_GangOperat:
 			if result.(*proto.GangRsp).Ok {
 				p.Gang(result.(*proto.GangRsp).Gang.Cards, result.(*proto.GangRsp).Gang.Type)
-				return p.Draw(mahjong.DisCard_SelfGang), true
+				return p.Draw(utils.DisCard_SelfGang), true
 			}
 		case proto.OperatType_EatOperat:
 			if result.(*proto.EatRsp).Ok {
 				p.Eat(result.(*proto.EatRsp).Eat)
-				return p.Drop(mahjong.DisCard{Card: 0}), true
+				return p.Drop(utils.DisCard{Card: 0}), true
 			}
 		}
 	}

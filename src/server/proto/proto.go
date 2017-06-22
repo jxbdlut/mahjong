@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jxbdlut/leaf/network/protobuf"
-	"server/mahjong"
+	"server/utils"
 	"strings"
 )
 
@@ -187,7 +187,7 @@ func (m *OperatRsp) Info() string {
 }
 
 func (m *DealReq) Info() string {
-	return mahjong.CardsStr(m.Cards)
+	return utils.CardsStr(m.Cards)
 }
 
 func (m *DealRsp) Info() string {
@@ -195,7 +195,7 @@ func (m *DealRsp) Info() string {
 }
 
 func (m *DrawReq) Info() string {
-	return "[" + mahjong.CardStr(m.Card) + "]"
+	return "[" + utils.CardStr(m.Card) + "]"
 }
 
 func (m *DrawRsp) Info() string {
@@ -203,15 +203,15 @@ func (m *DrawRsp) Info() string {
 }
 
 func (m *HuReq) Info() string {
-	return "[" + fmt.Sprintf("card:%v, type:%v, loser:%v", mahjong.CardStr(m.Card), HuTypeStr(m.Type), m.Lose) + "]"
+	return "[" + fmt.Sprintf("card:%v, type:%v, loser:%v", utils.CardStr(m.Card), HuTypeStr(m.Type), m.Lose) + "]"
 }
 
 func (m *HuRsp) Info() string {
-	return "[" + fmt.Sprintf("%v, card:%v, type:%v, loser:%v", m.Ok, mahjong.CardStr(m.Card), HuTypeStr(m.Type), m.Lose) + "]"
+	return "[" + fmt.Sprintf("%v, card:%v, type:%v, loser:%v", m.Ok, utils.CardStr(m.Card), HuTypeStr(m.Type), m.Lose) + "]"
 }
 
 func (m *Eat) Info() string {
-	return mahjong.CardsStr(m.HandCard) + "/" + mahjong.CardsStr(m.WaveCard)
+	return utils.CardsStr(m.HandCard) + "/" + utils.CardsStr(m.WaveCard)
 }
 
 func (m *EatReq) Info() string {
@@ -230,19 +230,19 @@ func (m *EatRsp) Info() string {
 
 func (m *PongReq) Info() string {
 	cards := []int32{m.Card, m.Card}
-	return mahjong.CardsStr(cards)
+	return utils.CardsStr(cards)
 }
 
 func (m *PongRsp) Info() string {
 	if m.Ok {
 		cards := []int32{m.Card, m.Card}
-		return mahjong.CardsStr(cards)
+		return utils.CardsStr(cards)
 	}
 	return fmt.Sprintf("[%v]", m.Ok)
 }
 
 func (m *Gang) Info() string {
-	return fmt.Sprintf("[%v, %v]", mahjong.CardsStr(m.Cards), GangTypeStr(m.Type))
+	return fmt.Sprintf("[%v, %v]", utils.CardsStr(m.Cards), GangTypeStr(m.Type))
 }
 
 func (m *GangReq) Info() string {
@@ -265,7 +265,7 @@ func (m *DropReq) Info() string {
 }
 
 func (m *DropRsp) Info() string {
-	return "[" + mahjong.CardStr(m.DisCard) + "]"
+	return "[" + utils.CardStr(m.DisCard) + "]"
 }
 
 func NewOperatMsg() *OperatMsg {
@@ -311,7 +311,7 @@ func (m *OperatMsg) Info() string {
 }
 
 func (m *Wave) Info() string {
-	return fmt.Sprintf("%v", mahjong.CardsStr(m.Cards))
+	return fmt.Sprintf("%v", utils.CardsStr(m.Cards))
 }
 
 func (m *Player) GetPlayerIndex(uid uint64) (int, error) {

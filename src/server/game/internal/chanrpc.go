@@ -4,13 +4,13 @@ import (
 	"github.com/jxbdlut/leaf/gate"
 	"github.com/jxbdlut/leaf/log"
 	"server/userdata"
-	"server/game/area"
+	"server/game/area_manager"
 )
 
 func init() {
 	skeleton.RegisterChanRPC("NewRobot", rpcNewAgent)
 	skeleton.RegisterChanRPC("CloseAgent", rpcCloseAgent)
-	area.Init()
+	area_manager.Init()
 }
 
 func rpcNewAgent(args []interface{}) {
