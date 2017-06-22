@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"server/game/area"
 )
 
 type Player struct {
@@ -77,7 +78,7 @@ func (p *Player) String() string {
 		str = str + "听["
 		tmp := []string{}
 		for _, key := range keys {
-			tmp = append(tmp, fmt.Sprintf("%v", p.prewin_cards[key].(*Ting).Info()))
+			tmp = append(tmp, fmt.Sprintf("%v", p.prewin_cards[key].(area.Ting).Info()))
 		}
 		str = str + strings.Join(tmp, ",")
 		str = str + "]"
@@ -479,6 +480,9 @@ func (p *Player) ValidRsp(req *proto.OperatReq, rsp *proto.OperatRsp) (interface
 }
 
 func (p *Player) CanHu(disCard utils.DisCard, req *proto.OperatReq) bool {
+	if disCard.Card == 0 {
+		return false
+	}
 	return p.table.rule.CanHu(disCard, p.GetProtoPlayer(), req)
 }
 

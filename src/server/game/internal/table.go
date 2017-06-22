@@ -40,7 +40,7 @@ func NewTable(tid uint32, tableType proto.CreateTableReq_TableType) *Table {
 	if tableType == proto.CreateTableReq_TableRobot {
 		t.avail_count = 1
 	} else if tableType == proto.CreateTableReq_TableNomal {
-		t.avail_count = 100
+		t.avail_count = 10
 	}
 	return t
 }

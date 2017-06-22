@@ -1,48 +1,36 @@
 package default_rule
 
 import (
+	"github.com/jxbdlut/leaf/log"
+	"server/game/area"
+	"server/game/area/base_rule"
 	"server/proto"
 	"server/utils"
-	"server/game/area"
-	"github.com/jxbdlut/leaf/log"
-	"server/game/area/base_rule"
 )
 
 type DefaultRule struct {
 	name          string
-	has_wind      bool
-	has_hun       bool
-	is_258		  bool
 	sepical_cards []int32
 	base_rule     *base_rule.BaseRule
 }
 
 func NewDefaultRule() area.Rule {
 	rule := new(DefaultRule)
-	rule.base_rule = base_rule.NewBaseRule(true, true, true)
+	rule.base_rule = base_rule.NewBaseRule(true, true, false)
 	rule.sepical_cards = append(rule.sepical_cards, 407)
 	return rule
 }
 
 func (m *DefaultRule) IsJiang(card int32) bool {
-	if m.is_258 {
-		t := card / 100
-		v := card % 10
-		if t != 4 && (v == 2 || v == 5 || v == 8) {
-			return true
-		} else {
-			return false
-		}
-	}
-	return true
+	return m.base_rule.IsJiang(card)
 }
 
 func (m *DefaultRule) HasHun() bool {
-	return m.has_hun
+	return m.base_rule.HasHun()
 }
 
 func (m *DefaultRule) HasWind() bool {
-	return m.has_wind
+	return m.base_rule.HasWind()
 }
 
 func (m *DefaultRule) CanHu(disCard utils.DisCard, player *proto.Player, req *proto.OperatReq) bool {
@@ -102,7 +90,7 @@ func (m *DefaultRule) CanEat(disCard utils.DisCard, player *proto.Player, req *p
 		log.Error("uid:%v, fromuid:%v not in table, err:%v", player.Uid, disCard.FromUid, err)
 		return false
 	}
-	if (i + 1)%len(player.Pos) != j  {
+	if (i+1)%len(player.Pos) != j {
 		return false
 	}
 
@@ -156,7 +144,7 @@ func (m *DefaultRule) CanAnGang(player *proto.Player, req *proto.OperatReq) bool
 			req.Type = req.Type | proto.OperatType_GangOperat
 			gang := &proto.Gang{
 				Cards: []int32{card, card, card, card},
-				Type: proto.GangType_AnGang,
+				Type:  proto.GangType_AnGang,
 			}
 			req.GangReq.Gang = append(req.GangReq.Gang, gang)
 			record = append(record, card)
@@ -176,7 +164,7 @@ func (m *DefaultRule) CanBuGang(player *proto.Player, req *proto.OperatReq) bool
 			req.Type = req.Type | proto.OperatType_GangOperat
 			gang := &proto.Gang{
 				Cards: []int32{wave.Cards[0]},
-				Type: proto.GangType_BuGang,
+				Type:  proto.GangType_BuGang,
 			}
 			req.GangReq.Gang = append(req.GangReq.Gang, gang)
 			ret = true
@@ -195,7 +183,7 @@ func (m *DefaultRule) CanMingGang(disCard utils.DisCard, player *proto.Player, r
 		req.Type = req.Type | proto.OperatType_GangOperat
 		gang := &proto.Gang{
 			Cards: []int32{card, card, card},
-			Type: proto.GangType_MingGang,
+			Type:  proto.GangType_MingGang,
 		}
 		req.GangReq.Gang = append(req.GangReq.Gang, gang)
 		return true
@@ -435,18 +423,18 @@ func (m *DefaultRule) GetTingCards(player *proto.Player) map[int32]interface{} {
 	}
 	need_num, index := m.GetBestComb(separate_results, need_hun_arr, need_hun_with_eye_arr)
 	if cur_hun_num-need_num >= 2 {
-		result[1] = 1
+		result[1] = NewTing(1)
 		return result
 	}
 	if cur_hun_num-m.SumNeedHun(need_hun_arr) > 0 {
-		result[2] = 2
+		result[2] = NewTing(2)
 		return result
 	}
 	if need_num > cur_hun_num+1 {
 		return result
 	}
-	//log.Debug("uid:%v separate_results:%v", p.uid, separate_results)
-	//log.Debug("uid:%v need_hun_arr:%v, need_hun_with_eye_arr:%v index:%v", p.uid, need_hun_arr, need_hun_with_eye_arr, index)
+	log.Debug("uid:%v separate_results:%v", player.Uid, separate_results)
+	log.Debug("uid:%v need_hun_arr:%v, need_hun_with_eye_arr:%v index:%v", player.Uid, need_hun_arr, need_hun_with_eye_arr, index)
 	var cache_index []int32
 	for _, i := range index {
 		begin, end := utils.SearchRange(separate_results[i+1])
@@ -458,7 +446,7 @@ func (m *DefaultRule) GetTingCards(player *proto.Player) map[int32]interface{} {
 			tmp_cards = append(tmp_cards, card)
 			utils.SortCards(tmp_cards, player.HunCard)
 			if m.IsHu(tmp_cards, need_hun_with_eye_arr[i]-1, player.HunCard) {
-				result[card] = card
+				result[card] = NewTing(card)
 			}
 		}
 		for j := 0; j < 4; j++ {
@@ -473,7 +461,7 @@ func (m *DefaultRule) GetTingCards(player *proto.Player) map[int32]interface{} {
 					tmp_cards = append(tmp_cards, card)
 					utils.SortCards(tmp_cards, player.HunCard)
 					if m.GetNeedHunInSub(tmp_cards, 0, 4) <= need_hun_arr[j]-1 {
-						result[card] = card
+						result[card] = NewTing(card)
 					}
 				}
 			}

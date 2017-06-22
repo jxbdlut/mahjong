@@ -18,3 +18,7 @@ type Rule interface {
 	Hu(player *proto.Player, huRsp *proto.HuRsp)
 	GetTingCards(player *proto.Player) map[int32]interface{}
 }
+
+type Ting interface {
+	Info() string
+}
