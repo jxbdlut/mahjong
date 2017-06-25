@@ -266,10 +266,13 @@ message Player
     repeated int32 cards = 2;
     repeated Wave waves = 3;
     repeated int32 drop_cards = 4;
-    map<int32, PreWinCard> prewin_cards = 5;
-    repeated PosMsg pos = 6;
-    int32 hun_card = 7;
-    bool cancel_hu = 8;
+    repeated int32 need_hun = 5;
+    repeated int32 need_hun_with_eye = 6;
+    repeated bool  is_need_update = 7;
+    map<int32, PreWinCard> prewin_cards = 8;
+    repeated PosMsg pos = 9;
+    int32 hun_card = 10;
+    bool cancel_hu = 11;
 }
 
 message RecvorReq

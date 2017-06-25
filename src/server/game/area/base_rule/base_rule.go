@@ -1,9 +1,9 @@
 package base_rule
 
 type BaseRule struct {
-	has_wind      bool
-	has_hun       bool
-	is_258		  bool
+	has_wind bool
+	has_hun  bool
+	is_258   bool
 }
 
 func NewBaseRule(has_wind bool, has_hun bool, is_258 bool) *BaseRule {
@@ -49,7 +49,7 @@ func (m *BaseRule) HasWind() bool {
 //	return false
 //}
 
-func (m *BaseRule)Check3Combine(card1 int32, card2 int32, card3 int32) bool {
+func (m *BaseRule) Check3Combine(card1 int32, card2 int32, card3 int32) bool {
 	m1, m2, m3 := card1/100, card2/100, card3/100
 
 	if m1 != m2 || m1 != m3 {
@@ -68,19 +68,23 @@ func (m *BaseRule)Check3Combine(card1 int32, card2 int32, card3 int32) bool {
 	return false
 }
 
-func (m *BaseRule)Check2Combine(card1 int32, card2 int32) bool {
+func (m *BaseRule) Check2Combine(card1 int32, card2 int32) bool {
 	if card1 == card2 {
-		return true
+		if m.IsJiang(card1) {
+			return true
+		} else {
+			return false
+		}
 	}
 	return false
 }
 
-func (m *BaseRule) GetModNeedNum(len int, eye bool) int {
-	var need_hun_arr []int
+func (m *BaseRule) GetModNeedNum(len int, eye bool) int32 {
+	var need_hun_arr []int32
 	if eye {
-		need_hun_arr = []int{2, 1, 0}
+		need_hun_arr = []int32{2, 1, 0}
 	} else {
-		need_hun_arr = []int{0, 2, 1}
+		need_hun_arr = []int32{0, 2, 1}
 	}
 
 	if len == 0 {

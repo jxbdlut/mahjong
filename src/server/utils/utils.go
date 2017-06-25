@@ -31,7 +31,7 @@ var (
 		301: "一条", 302: "二条", 303: "三条", 304: "四条", 305: "五条", 306: "六条", 307: "七条", 308: "八条",
 		309: "九条",
 		401: "東", 402: "西", 403: "南", 404: "北", 405: "中", 406: "發", 407: "白",
-		1: "腾空", 2: "飘将", 3: "飘门"}
+		1: "腾空", 2: "飘将", 3: "飘门", 4: "风一色"}
 )
 
 func CardsStr(cards []int32) string {
@@ -46,8 +46,8 @@ func CardStr(card int32) string {
 	return CardsMap[card]
 }
 
-func Count(cards []int32, card int32) int32 {
-	count := int32(0)
+func Count(cards []int32, card int32) int {
+	count := 0
 	for _, c := range cards {
 		if c == card {
 			count++
@@ -115,6 +115,16 @@ func SearchRange(cards []int32) (int32, int32) {
 	return begin, end
 }
 
+func DelCountCard(cards []int32, card int32, count int) []int32 {
+	for i := 0; i < count; i++ {
+		index := Index(cards, card)
+		if index != -1 {
+			cards = append(cards[:index], cards[index+1:]...)
+		}
+	}
+	return cards
+}
+
 func DelCard(cards []int32, card1 int32, card2 int32, card3 int32) []int32 {
 	index := Index(cards, card1)
 	if index != -1 {
@@ -148,7 +158,7 @@ func SeparateCards(cards []int32, hun_card int32) [5][]int32 {
 	return result
 }
 
-func Min(a int, b int) int {
+func Min(a int32, b int32) int32 {
 	if a < b {
 		return a
 	} else {

@@ -6,9 +6,9 @@ import (
 	"github.com/jxbdlut/leaf/log"
 	"math/rand"
 	"server/game/area"
-	"server/utils"
 	"server/proto"
 	"server/userdata"
+	"server/utils"
 	"time"
 )
 
@@ -27,6 +27,7 @@ type Table struct {
 	round       int
 	drop_record map[uint64][]int32
 	avail_count int
+	big_hu      bool
 }
 
 func NewTable(tid uint32, tableType proto.CreateTableReq_TableType) *Table {
@@ -40,7 +41,8 @@ func NewTable(tid uint32, tableType proto.CreateTableReq_TableType) *Table {
 	if tableType == proto.CreateTableReq_TableRobot {
 		t.avail_count = 1
 	} else if tableType == proto.CreateTableReq_TableNomal {
-		t.avail_count = 10
+		t.avail_count = 1000
+		// /var/log/mahjong/server.log
 	}
 	return t
 }
@@ -318,7 +320,7 @@ func (t *Table) GetNeedHunInSub(sub_cards []int32, min_need *Ting, max_need *Tin
 	if len_sub_cards == 0 {
 		return GetMin(min_ting, max_ting)
 	} else if len_sub_cards == 1 {
-		return GetMin(min_ting.AddHunNoEye(2, []int32{sub_cards[0]}).AddNum(1), max_ting)
+		return GetMin(min_ting.AddHunNoEye(2, []int32{sub_cards[0]}), max_ting)
 	} else if len_sub_cards == 2 {
 		m, v0, v1 := sub_cards[0]/100, sub_cards[0]%10, sub_cards[1]%10
 		if m == 4 {
@@ -401,13 +403,16 @@ func (t *Table) GetNeedHunInSub(sub_cards []int32, min_need *Ting, max_need *Tin
 		// 第一个自己一铺
 		if min_ting.AddTing(t.GetModNeedNum(len_sub_cards-1, false)).AddNum(2).Smaller(max_ting) {
 			tmp_cards := utils.Copy(sub_cards[1:])
-			max_ting = t.GetNeedHunInSub(tmp_cards, min_ting.AddHunNoEye(2, []int32{sub_cards[0]}).AddKezi(1), max_ting)
+			max_ting = t.GetNeedHunInSub(tmp_cards, min_ting.AddHunNoEye(0, []int32{sub_cards[0]}).AddKezi(1), max_ting)
 		}
 	}
 	return max_ting
 }
 
 func (t *Table) IsJiang(card int32) bool {
+	if t.big_hu {
+		return true
+	}
 	return t.rule.IsJiang(card)
 }
 
@@ -588,11 +593,11 @@ func (t *Table) GetTingCards(p *Player) map[int32]interface{} {
 	log.Debug("uid:%v, separate_results:%v", p.uid, separate_results)
 	log.Debug("uid:%v, need_hun_arr:%v, need_hun_with_eye_arr:%v index:%v", p.uid, need_hun_arr, need_hun_with_eye_arr, index)
 	if cur_hun.Copy().SubTing(need_hun).BiggerOrEqualNum(2) {
-		result[1] = &Ting{tengkong:true}
+		result[1] = &Ting{tengkong: true}
 		return result
 	}
 	if cur_hun.Copy().SubTing(t.SumNeedHun(need_hun_arr)).BiggerNum(0) {
-		result[2] = &Ting{piaojiang:true}
+		result[2] = &Ting{piaojiang: true}
 	}
 	if need_hun.Bigger(cur_hun.Copy().AddNum(1)) {
 		return result
@@ -615,7 +620,7 @@ func (t *Table) GetTingCards(p *Player) map[int32]interface{} {
 			if ting.SmallerOrEqual(need_hun_with_eye_arr[i].Copy().SubNum(1)) {
 				ting.card = card
 				if ting.IsPiaoMen() {
-					result[3] = &Ting{piaomen:true}
+					result[3] = &Ting{piaomen: true}
 				}
 				result[card] = ting
 			}
@@ -635,7 +640,7 @@ func (t *Table) GetTingCards(p *Player) map[int32]interface{} {
 					if ting.SmallerOrEqual(need_hun_arr[j].Copy().SubNum(1)) {
 						ting.card = card
 						if ting.IsPiaoMen() {
-							result[3] = &Ting{piaomen:true}
+							result[3] = &Ting{piaomen: true}
 						}
 						result[card] = ting
 					}
@@ -743,7 +748,7 @@ func (t *Table) Run() {
 			if !t.TableOperat(proto.TableOperat_TableContinue) {
 				break
 			}
-			time.Sleep(1 * time.Millisecond)
+			//time.Sleep(1 * time.Millisecond)
 		}
 
 		//time.Sleep(50 * time.Millisecond)

@@ -9,19 +9,23 @@ import (
 )
 
 type DefaultRule struct {
-	name          string
-	sepical_cards []int32
-	base_rule     *base_rule.BaseRule
+	name        string
+	qin_yi_se   bool
+	jiang_yi_se bool
+	wind_yi_se  bool
+	base_rule   *base_rule.BaseRule
 }
 
 func NewDefaultRule() area.Rule {
 	rule := new(DefaultRule)
-	rule.base_rule = base_rule.NewBaseRule(true, true, false)
-	rule.sepical_cards = append(rule.sepical_cards, 407)
+	rule.base_rule = base_rule.NewBaseRule(true, true, true)
 	return rule
 }
 
 func (m *DefaultRule) IsJiang(card int32) bool {
+	if m.qin_yi_se {
+		return true
+	}
 	return m.base_rule.IsJiang(card)
 }
 
@@ -208,8 +212,18 @@ func (m *DefaultRule) CanPong(disCard utils.DisCard, player *proto.Player, req *
 func (m *DefaultRule) Hu(player *proto.Player, huRsp *proto.HuRsp) {
 
 }
+func (m *DefaultRule) Check2Combine(card1 int32, card2 int32) bool {
+	if card1 == card2 {
+		if m.IsJiang(card1) {
+			return true
+		} else {
+			return false
+		}
+	}
+	return false
+}
 
-func (m *DefaultRule) GetNeedHunInSub(sub_cards []int32, hun_num int, need_hun_count int) int {
+func (m *DefaultRule) GetNeedHunInSub(sub_cards []int32, hun_num int32, need_hun_count int32) int32 {
 	if need_hun_count == 0 {
 		return need_hun_count
 	}
@@ -305,7 +319,7 @@ func (m *DefaultRule) GetNeedHunInSub(sub_cards []int32, hun_num int, need_hun_c
 	return need_hun_count
 }
 
-func (m *DefaultRule) GetNeedHunInSubWithEye(cards []int32, min_need_num int) int {
+func (m *DefaultRule) GetNeedHunInSubWithEye(cards []int32, min_need_num int32) int32 {
 	// 拷贝
 	cards_copy := utils.Copy(cards)
 	len_cards := len(cards_copy)
@@ -318,36 +332,49 @@ func (m *DefaultRule) GetNeedHunInSubWithEye(cards []int32, min_need_num int) in
 	for i := 0; i < len_cards; i++ {
 		if i == len_cards-1 { // 如果是最后一张牌
 			tmp_cards := utils.Copy(cards_copy)
-			tmp_cards = utils.DelCard(tmp_cards, cards_copy[i], 0, 0)
-			min_need_num = utils.Min(min_need_num, m.GetNeedHunInSub(tmp_cards, 0, 4)+1)
+			if m.IsJiang(cards_copy[i]) {
+				tmp_cards = utils.DelCard(tmp_cards, cards_copy[i], 0, 0)
+				min_need_num = utils.Min(min_need_num, m.GetNeedHunInSub(tmp_cards, 0, 4)+1)
+			} else {
+				min_need_num = utils.Min(min_need_num, m.GetNeedHunInSub(tmp_cards, 0, 4)+2)
+			}
 		} else {
 			if i+2 == len_cards || cards_copy[i]%10 != cards_copy[i+2]%10 {
-				if m.base_rule.Check2Combine(cards_copy[i], cards_copy[i+1]) {
-					tmp_cards := utils.Copy(cards_copy)
+				tmp_cards := utils.Copy(cards_copy)
+				if m.Check2Combine(cards_copy[i], cards_copy[i+1]) {
 					tmp_cards = utils.DelCard(tmp_cards, cards_copy[i], cards_copy[i+1], 0)
 					min_need_num = utils.Min(min_need_num, m.GetNeedHunInSub(tmp_cards, 0, 4))
+				} else {
+					min_need_num = utils.Min(min_need_num, m.GetNeedHunInSub(tmp_cards, 0, 4)+2)
 				}
 			}
 			if cards_copy[i]%10 != cards_copy[i+1]%10 {
 				tmp_cards := utils.Copy(cards_copy)
-				tmp_cards = utils.DelCard(tmp_cards, cards_copy[i], 0, 0)
-				min_need_num = utils.Min(min_need_num, m.GetNeedHunInSub(tmp_cards, 0, 4)+1)
+				if m.IsJiang(tmp_cards[i]) {
+					tmp_cards = utils.DelCard(tmp_cards, cards_copy[i], 0, 0)
+					min_need_num = utils.Min(min_need_num, m.GetNeedHunInSub(tmp_cards, 0, 4)+1)
+				} else if m.IsJiang(tmp_cards[i+1]) {
+					tmp_cards = utils.DelCard(tmp_cards, cards_copy[i+1], 0, 0)
+					min_need_num = utils.Min(min_need_num, m.GetNeedHunInSub(tmp_cards, 0, 4)+1)
+				} else {
+					min_need_num = utils.Min(min_need_num, m.GetNeedHunInSub(tmp_cards, 0, 4)+2)
+				}
 			}
 		}
 	}
 	return min_need_num
 }
 
-func (m *DefaultRule) SumNeedHun(need_hun_arr []int) int {
-	var sum int
+func (m *DefaultRule) SumNeedHun(need_hun_arr []int32) int32 {
+	var sum int32
 	for _, num := range need_hun_arr {
 		sum = sum + num
 	}
 	return sum
 }
 
-func (m *DefaultRule) GetBestComb(separate_results [5][]int32, need_hun_arr []int, need_hun_with_eye_arr []int) (int, []int) {
-	min_need_num := 5
+func (m *DefaultRule) GetBestComb(separate_results [5][]int32, need_hun_arr []int32, need_hun_with_eye_arr []int32) (int32, []int) {
+	min_need_num := int32(5)
 	sum_num := m.SumNeedHun(need_hun_arr)
 	var result []int
 
@@ -364,89 +391,211 @@ func (m *DefaultRule) GetBestComb(separate_results [5][]int32, need_hun_arr []in
 	return min_need_num, result
 }
 
-func (m *DefaultRule) IsHu(cards []int32, hun_num int, hun_card int32) bool {
-	cards_copy := utils.Copy(cards)
-	len_cards := len(cards_copy)
-	if len_cards == 0 {
-		if hun_num >= 2 {
-			return true
-		} else {
+func (m *DefaultRule) CheckQingYiSe(player *proto.Player) map[int32]interface{} {
+	result := make(map[int32]interface{})
+	var se_count []int32
+	separate_results := utils.SeparateCards(player.Cards, player.HunCard)
+
+	for _, wave := range player.Waves {
+		t := wave.Cards[0] / 100
+		if utils.Contain(se_count, t) {
+			continue
+		}
+		se_count = append(se_count, t)
+		if len(se_count) >= 2 {
+			return result
+		}
+	}
+
+	for _, cards := range separate_results[1:] {
+		if len(cards) != 0 {
+			t := cards[0] / 100
+			if utils.Contain(se_count, t) {
+				continue
+			}
+			se_count = append(se_count, t)
+			if len(se_count) >= 2 {
+				return result
+			}
+		}
+	}
+
+	m.qin_yi_se = true
+	t := se_count[0]
+	cur_hun_num := int32(len(separate_results[0]))
+	need_num := m.GetNeedHunInSub(separate_results[t], 0, 4)
+	if need_num < cur_hun_num {
+		result[2] = m.NewTing(2)
+		m.qin_yi_se = false
+		return result
+	}
+	for i := int32(1); i < 10; i++ {
+		card := int32(t*100 + i)
+		if card == player.HunCard {
+			continue
+		}
+		tmp_cards := utils.Copy(separate_results[t])
+		tmp_cards = append(tmp_cards, card)
+		utils.SortCards(tmp_cards, player.HunCard)
+		if m.GetNeedHunInSubWithEye(tmp_cards, 4) <= cur_hun_num {
+			result[card] = m.NewTing(card)
+		}
+	}
+	m.qin_yi_se = false
+	return result
+}
+
+func (m *DefaultRule) NewTing(card int32) *Ting {
+	return NewTing(card, m.qin_yi_se, m.jiang_yi_se, m.wind_yi_se)
+}
+
+func (m *DefaultRule) CheckPengPengHu(player *proto.Player, result map[int32]interface{}) map[int32]interface{} {
+	separate_results := utils.SeparateCards(player.Cards, player.HunCard)
+	for _, wave := range player.Waves {
+		if wave.WaveType == proto.Wave_EatWave {
+			return result
+		}
+	}
+	cur_hun_num := len(separate_results[0])
+	var need_hun int
+	eye := false
+	for _, cards := range separate_results[1:] {
+		cache_cards := []int32{}
+		for _, card := range cards {
+			if utils.Contain(cache_cards, card) {
+				continue
+			}
+			cache_cards = append(cache_cards, card)
+			count := utils.Count(cards, card)
+			switch count {
+			case 1:
+				if eye {
+					need_hun = need_hun + 2
+					result[card] = m.NewTing(card).SetPengPengHu()
+				} else {
+					eye = true
+					need_hun = need_hun + 1
+					result[card] = m.NewTing(card).SetPengPengHu()
+				}
+			case 2:
+				if eye {
+					need_hun = need_hun + 1
+					result[card] = m.NewTing(card).SetPengPengHu()
+				} else {
+					eye = true
+					result[card] = m.NewTing(card).SetPengPengHu()
+				}
+			case 3:
+			case 4:
+				if eye {
+					need_hun = need_hun + 2
+					result[card] = m.NewTing(card).SetPengPengHu()
+				} else {
+					eye = true
+					need_hun = need_hun + 1
+					result[card] = m.NewTing(card).SetPengPengHu()
+				}
+			}
+			if cur_hun_num+1 < need_hun {
+				result = make(map[int32]interface{})
+				return result
+			}
+		}
+	}
+	if eye && cur_hun_num > need_hun+1 || !eye && cur_hun_num > need_hun {
+		result = make(map[int32]interface{})
+		result[1] = m.NewTing(1).SetPengPengHu()
+	}
+	return result
+}
+
+func (m *DefaultRule) CheckJiangYiSe(player *proto.Player) bool {
+	for _, wave := range player.Waves {
+		if wave.WaveType == proto.Wave_EatWave {
+			return false
+		}
+		if !m.base_rule.IsJiang(wave.Cards[0]) {
 			return false
 		}
 	}
-
-	if hun_num < m.base_rule.GetModNeedNum(len_cards, true) {
-		return false
-	}
-	utils.SortCards(cards_copy, hun_card)
-	for i := 0; i < len_cards; i++ {
-		// 如果是最后一张牌
-		if i+1 == len_cards {
-			if hun_num > 0 {
-				tmp_cards := utils.Copy(cards_copy)
-				tmp_cards = utils.DelCard(tmp_cards, cards_copy[i], 0, 0)
-				if m.GetNeedHunInSub(tmp_cards, 0, 4) <= hun_num-1 {
-					return true
-				}
-			}
-		} else {
-			if i+2 == len_cards || cards_copy[i]%10 != cards_copy[i+2]%10 {
-				if m.base_rule.Check2Combine(cards_copy[i], cards_copy[i+1]) {
-					tmp_cards := utils.Copy(cards_copy)
-					tmp_cards = utils.DelCard(tmp_cards, cards_copy[i], cards_copy[i+1], 0)
-					if m.GetNeedHunInSub(tmp_cards, 0, 4) <= hun_num {
-						return true
-					}
-				}
-			}
-			if hun_num > 0 && cards_copy[i]%10 != cards_copy[i+1]%10 {
-				tmp_cards := utils.Copy(cards_copy)
-				tmp_cards = utils.DelCard(tmp_cards, cards_copy[i], 0, 0)
-				if m.GetNeedHunInSub(tmp_cards, 0, 4) <= hun_num-1 {
-					return true
-				}
-			}
+	for _, card := range player.Cards {
+		if !m.base_rule.IsJiang(card) {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
-func (m *DefaultRule) GetTingCards(player *proto.Player) map[int32]interface{} {
-	result := make(map[int32]interface{})
+func (m *DefaultRule) CheckWindYiSe(player *proto.Player) bool {
+	for _, wave := range player.Waves {
+		if wave.WaveType == proto.Wave_EatWave {
+			return false
+		}
+		if wave.Cards[0]/100 != 4 {
+			return false
+		}
+	}
+	for _, card := range player.Cards {
+		if card/100 != 4 {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *DefaultRule) GetTingCards(player *proto.Player) ([]int32, []int32, map[int32]interface{}) {
 	separate_results := utils.SeparateCards(player.Cards, player.HunCard)
-	var need_hun_arr []int          // 每个分类需要混的数组
-	var need_hun_with_eye_arr []int // 每个将分类需要混的数组
-	cur_hun_num := len(separate_results[0])
-	for _, cards := range separate_results[1:] {
-		need_hun_arr = append(need_hun_arr, m.GetNeedHunInSub(cards, 0, 4))
-		need_hun_with_eye_arr = append(need_hun_with_eye_arr, m.GetNeedHunInSubWithEye(cards, 4))
+	result := m.CheckQingYiSe(player)
+	m.jiang_yi_se = m.CheckJiangYiSe(player)
+	m.wind_yi_se = m.CheckWindYiSe(player)
+	result = m.CheckPengPengHu(player, result)
+	if m.jiang_yi_se {
+		result[2] = m.NewTing(2).SetJiangYiSe()
+		return player.NeedHun, player.NeedHunWithEye, result
 	}
-	need_num, index := m.GetBestComb(separate_results, need_hun_arr, need_hun_with_eye_arr)
+	if m.wind_yi_se {
+		result[4] = m.NewTing(4).SetWindYiSe()
+		return player.NeedHun, player.NeedHunWithEye, result
+	}
+	if ok := result[1]; ok != nil {
+		return player.NeedHun, player.NeedHunWithEye, result
+	}
+	cur_hun_num := int32(len(separate_results[0]))
+	for i, update_flag := range player.IsNeedUpdate {
+		if update_flag {
+			player.NeedHun[i] = m.GetNeedHunInSub(separate_results[i+1], 0, 4)
+			player.NeedHunWithEye[i] = m.GetNeedHunInSubWithEye(separate_results[i+1], 4)
+		}
+	}
+	need_num, index := m.GetBestComb(separate_results, player.NeedHun, player.NeedHunWithEye)
+	log.Debug("uid:%v separate_results:%v", player.Uid, separate_results)
+	log.Debug("uid:%v need_hun_arr:%v, need_hun_with_eye_arr:%v index:%v", player.Uid, player.NeedHun, player.NeedHunWithEye, index)
 	if cur_hun_num-need_num >= 2 {
-		result[1] = NewTing(1)
-		return result
+		result[1] = m.NewTing(1)
+		return player.NeedHun, player.NeedHunWithEye, result
 	}
-	if cur_hun_num-m.SumNeedHun(need_hun_arr) > 0 {
-		result[2] = NewTing(2)
-		return result
+	if cur_hun_num-m.SumNeedHun(player.NeedHun) > 0 {
+		result[2] = m.NewTing(2)
+		return player.NeedHun, player.NeedHunWithEye, result
 	}
 	if need_num > cur_hun_num+1 {
-		return result
+		return player.NeedHun, player.NeedHunWithEye, result
 	}
-	log.Debug("uid:%v separate_results:%v", player.Uid, separate_results)
-	log.Debug("uid:%v need_hun_arr:%v, need_hun_with_eye_arr:%v index:%v", player.Uid, need_hun_arr, need_hun_with_eye_arr, index)
 	var cache_index []int32
 	for _, i := range index {
 		begin, end := utils.SearchRange(separate_results[i+1])
 		for card := begin; card < end+1; card++ {
+			if card == player.HunCard {
+				continue
+			}
 			if ok := result[card]; ok != nil {
 				continue
 			}
 			tmp_cards := utils.Copy(separate_results[i+1])
 			tmp_cards = append(tmp_cards, card)
 			utils.SortCards(tmp_cards, player.HunCard)
-			if m.IsHu(tmp_cards, need_hun_with_eye_arr[i]-1, player.HunCard) {
-				result[card] = NewTing(card)
+			if m.GetNeedHunInSubWithEye(tmp_cards, 4) <= player.NeedHunWithEye[i]-1 {
+				result[card] = m.NewTing(card)
 			}
 		}
 		for j := 0; j < 4; j++ {
@@ -454,18 +603,21 @@ func (m *DefaultRule) GetTingCards(player *proto.Player) map[int32]interface{} {
 				cache_index = append(cache_index, int32(j))
 				begin, end := utils.SearchRange(separate_results[j+1])
 				for card := begin; card < end+1; card++ {
+					if card == player.HunCard {
+						continue
+					}
 					if ok := result[card]; ok != nil {
 						continue
 					}
 					tmp_cards := utils.Copy(separate_results[j+1])
 					tmp_cards = append(tmp_cards, card)
 					utils.SortCards(tmp_cards, player.HunCard)
-					if m.GetNeedHunInSub(tmp_cards, 0, 4) <= need_hun_arr[j]-1 {
-						result[card] = NewTing(card)
+					if m.GetNeedHunInSub(tmp_cards, 0, 4) <= player.NeedHun[j]-1 {
+						result[card] = m.NewTing(card)
 					}
 				}
 			}
 		}
 	}
-	return result
+	return player.NeedHun, player.NeedHunWithEye, result
 }

@@ -106,13 +106,14 @@ func (m *Ting) IsPiaoMen() bool {
 		if needHun.eye == false && utils.Contain(needHun.cards, m.card) && needHun.num == 1 {
 			return true
 		}
-		if utils.Contain(needHun.cards, m.card) && utils.Contain(needHun.cards, jiang) {
+		if utils.Contain(needHun.cards, m.card) && utils.Contain(needHun.cards, jiang) && m.card != jiang {
 			return true
 		}
 		if needHun.eye == true && needHun.num == 2 {
 			num_flag = true
 		}
-		if needHun.eye == false && m.HasJiang(needHun) && utils.Contain(needHun.cards, m.card) {
+		//三饼,三饼,四万,六万 (hun: 三饼)
+		if needHun.eye == false && m.HasJiang(needHun) && utils.Contain(needHun.cards, m.card) && !m.table.rule.IsJiang(m.card){
 			jiang_flag = true
 		}
 	}

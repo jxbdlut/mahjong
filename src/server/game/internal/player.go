@@ -7,30 +7,33 @@ import (
 	"github.com/jxbdlut/leaf/log"
 	"net"
 	"reflect"
-	"server/utils"
+	"server/game/area"
 	"server/proto"
+	"server/utils"
 	"sort"
 	"strings"
 	"time"
-	"server/game/area"
 )
 
 type Player struct {
-	agent           gate.Agent
-	uid             uint64
-	name            string
-	cards           []int32
-	separate_result [5][]int32
-	cancel_hu       bool
-	waves           []*proto.Wave
-	prewin_cards    map[int32]interface{}
-	win_card        int32
-	master          bool
-	online          bool
-	table           *Table
-	robot           robot
-	isRobot         bool
-	timeout         time.Duration
+	agent             gate.Agent
+	uid               uint64
+	name              string
+	cards             []int32
+	separate_result   [5][]int32
+	cancel_hu         bool
+	waves             []*proto.Wave
+	need_hun          []int32
+	need_hun_with_eye []int32
+	is_need_update    []bool
+	prewin_cards      map[int32]interface{}
+	win_card          int32
+	master            bool
+	online            bool
+	table             *Table
+	robot             robot
+	isRobot           bool
+	timeout           time.Duration
 }
 
 var (
@@ -49,6 +52,12 @@ func NewPlayer(agent gate.Agent, uid uint64) *Player {
 		p.isRobot = true
 	}
 	return p
+}
+
+func (p *Player) InitNeedHun() {
+	p.need_hun = append(p.need_hun[:0], []int32{4, 4, 4, 4}...)
+	p.need_hun_with_eye = append(p.need_hun_with_eye[:0], []int32{4, 4, 4, 4}...)
+	p.is_need_update = append(p.is_need_update[:0], []bool{true, true, true, true}...)
 }
 
 func (p *Player) SetAgent(agent gate.Agent) {
@@ -100,6 +109,9 @@ func (p *Player) GetProtoPlayer() *proto.Player {
 	player.CancelHu = p.cancel_hu
 	player.DropCards = append(player.DropCards, p.table.drop_record[p.uid]...)
 	player.Waves = append(player.Waves, p.waves...)
+	player.NeedHun = append(player.NeedHun, p.need_hun...)
+	player.NeedHunWithEye = append(player.NeedHunWithEye, p.need_hun_with_eye...)
+	player.IsNeedUpdate = append(player.IsNeedUpdate, p.is_need_update...)
 	player.PrewinCards = make(map[int32]*proto.PreWinCard)
 	if len(p.prewin_cards) > 0 {
 		prewinCard := &proto.PreWinCard{}
@@ -120,6 +132,7 @@ func (p *Player) Clear() {
 	p.win_card = 0
 	p.cancel_hu = false
 	p.separate_result = [5][]int32{}
+	p.InitNeedHun()
 }
 
 func (p *Player) FeedCard(cards []int32) {
@@ -209,8 +222,29 @@ func (p *Player) DelCard(card int32) {
 		}
 	}
 	p.separate_result = utils.SeparateCards(p.cards, p.table.hun_card)
-	p.prewin_cards = p.table.rule.GetTingCards(p.GetProtoPlayer())
+	p.need_hun, p.need_hun_with_eye, p.prewin_cards = p.table.rule.GetTingCards(p.GetProtoPlayer())
+	p.ClearUpdate()
 	log.Release("%v", p)
+}
+
+func (p *Player) ResetUpdate() {
+	for i := 0; i < len(p.is_need_update); i++ {
+		p.is_need_update[i] = true
+	}
+}
+
+func (p *Player) ClearUpdate() {
+	for i := 0; i < len(p.is_need_update); i++ {
+		p.is_need_update[i] = false
+	}
+}
+
+func (p *Player) SetUpdate(card int32) {
+	if card == 0 || card == p.table.hun_card {
+		return
+	}
+	i := card / 100
+	p.is_need_update[i-1] = true
 }
 
 func (p *Player) Deal() {
@@ -226,6 +260,7 @@ func (p *Player) Deal() {
 		return
 	}
 	result, err := p.ValidRsp(req, rsp.(*proto.OperatRsp))
+	p.ResetUpdate()
 	if err != nil {
 		_ = result
 		log.Error("deal rsp invalid err:%v, rsp:%v", err, rsp.(*proto.OperatRsp).Info())
@@ -236,6 +271,7 @@ func (p *Player) Deal() {
 
 // card为零的情况是为了防止吃或者碰之后出错，要随机出一张牌
 func (p *Player) Drop(disCard utils.DisCard) utils.DisCard {
+	card := disCard.Card
 	operatMsg := proto.NewOperatMsg()
 	req := proto.NewOperatReq()
 	req.Type = proto.OperatType_DropOperat
@@ -252,6 +288,7 @@ func (p *Player) Drop(disCard utils.DisCard) utils.DisCard {
 	if err != nil {
 		log.Error("uid:%v, Drop err:%v", p.uid, err)
 		p.table.Broadcast(operatMsg)
+		p.SetUpdate(disCard.Card)
 		return disCard
 	}
 	log.Release("uid:%v, %v, %v", p.uid, req.Info(), rsp.(*proto.OperatRsp).Info())
@@ -259,6 +296,7 @@ func (p *Player) Drop(disCard utils.DisCard) utils.DisCard {
 	if err != nil {
 		log.Error("uid:%v ValidRsp err:%v", err)
 		p.table.Broadcast(operatMsg)
+		p.SetUpdate(disCard.Card)
 		return disCard
 	}
 	p.BoardCastMsg(rsp.(*proto.OperatRsp))
@@ -280,6 +318,10 @@ func (p *Player) Drop(disCard utils.DisCard) utils.DisCard {
 		return p.Draw(utils.DisCard_SelfGang)
 	case proto.OperatType_DropOperat:
 		disCard.Card = result.(*proto.DropRsp).DisCard
+		if disCard.Card != card {
+			p.SetUpdate(disCard.Card)
+			p.SetUpdate(card)
+		}
 		p.DelCard(disCard.Card)
 	}
 	return disCard
@@ -292,7 +334,6 @@ func (p *Player) Draw(cardType utils.DisCardType) utils.DisCard {
 	req := proto.NewOperatReq()
 	req.Type = proto.OperatType_DrawOperat
 	req.DrawReq.Card = card
-
 	rsp, err := p.Notify(req)
 	if err != nil {
 		log.Error("uid:%v Draw err:%v", p.uid, err)
@@ -307,7 +348,7 @@ func (p *Player) Draw(cardType utils.DisCardType) utils.DisCard {
 	}
 	switch rsp.(*proto.OperatRsp).Type {
 	case proto.OperatType_DrawOperat:
-		return p.Drop(disCard)
+		disCard = p.Drop(disCard)
 	}
 	return disCard
 }
@@ -414,6 +455,7 @@ func (p *Player) Gang(gangCards []int32, gangType proto.GangType) {
 	}
 	p.DelCards(delCards)
 	p.AddGangWave(cards, gangType)
+	p.SetUpdate(cards[0])
 }
 
 func (p *Player) Pong(card int32) {
@@ -421,12 +463,14 @@ func (p *Player) Pong(card int32) {
 	p.Operat()
 	p.DelCards(cards)
 	p.AddPongWave(card)
+	p.SetUpdate(card)
 }
 
 func (p *Player) Eat(eat *proto.Eat) {
 	p.Operat()
 	p.AddEatWave(eat.WaveCard)
 	p.DelCards(eat.HandCard)
+	p.SetUpdate(eat.WaveCard[0])
 }
 
 func (p *Player) ValidRsp(req *proto.OperatReq, rsp *proto.OperatRsp) (interface{}, error) {
