@@ -392,7 +392,7 @@ func (a *agent) SetUserData(data interface{}) {
 func main() {
 	lconf.LogLevel = conf.Server.LogLevel
 	lconf.LogPath = conf.Server.LogPath
-	lconf.LogPath = "/var/log/mahjong/client.log"
+	lconf.LogPath = "./log/client.log"
 	lconf.LogFlag = conf.LogFlag
 	lconf.ConsolePort = conf.Server.ConsolePort
 	lconf.ProfilePath = conf.Server.ProfilePath
@@ -406,7 +406,7 @@ func main() {
 	}
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	uid_start := r.Intn(4200000000)
+	uid_start := r.Intn(math.MaxInt32)
 	for i := 0; i < PlayerNum; i++ {
 		uid := uint64(uid_start)
 		is_master := false

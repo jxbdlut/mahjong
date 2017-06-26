@@ -575,7 +575,9 @@ func (m *DefaultRule) GetTingCards(player *proto.Player) ([]int32, []int32, map[
 		return player.NeedHun, player.NeedHunWithEye, result
 	}
 	if cur_hun_num-m.SumNeedHun(player.NeedHun) > 0 {
-		result[2] = m.NewTing(2)
+		if ok := result[2]; ok == nil {
+			result[2] = m.NewTing(2)
+		}
 		return player.NeedHun, player.NeedHunWithEye, result
 	}
 	if need_num > cur_hun_num+1 {

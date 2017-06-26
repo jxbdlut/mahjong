@@ -1,6 +1,6 @@
 {
 	"LogLevel": "debug",
-	"LogPath": "/var/log/mahjong/server.log",
+	"LogPath": "./log/server.log",
 	"TCPAddr": "127.0.0.1:3563",
 	"MaxConnNum": 20000
 }
