@@ -30,7 +30,7 @@ var (
 		209: "九饼",
 		301: "一条", 302: "二条", 303: "三条", 304: "四条", 305: "五条", 306: "六条", 307: "七条", 308: "八条",
 		309: "九条",
-		401: "東", 402: "西", 403: "南", 404: "北", 405: "中", 406: "發", 407: "白",
+		401: "東", 402: "南", 403: "西", 404: "北", 405: "中", 406: "發", 407: "白",
 		1: "腾空", 2: "飘将", 3: "飘门", 4: "风一色"}
 )
 
@@ -221,6 +221,32 @@ func DropSingle(separate_result [5][]int32) int32 {
 		}
 	}
 
+	return 0
+}
+
+func DropNot258(cards []int32, hun_card int32) int32 {
+	for _, card := range cards {
+		if card == hun_card {
+			continue
+		}
+		t, v := card/100, card%10
+		if t == 4 || v != 2 && v != 5 && v != 8 {
+			return card
+		}
+	}
+	return 0
+}
+
+func DropNotWind(cards []int32, hun_card int32) int32 {
+	for _, card := range cards {
+		if card == hun_card {
+			continue
+		}
+		t := card / 100
+		if t != 4 {
+			return card
+		}
+	}
 	return 0
 }
 

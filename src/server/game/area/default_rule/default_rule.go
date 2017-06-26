@@ -449,16 +449,17 @@ func (m *DefaultRule) NewTing(card int32) *Ting {
 	return NewTing(card, m.qin_yi_se, m.jiang_yi_se, m.wind_yi_se)
 }
 
-func (m *DefaultRule) CheckPengPengHu(player *proto.Player, result map[int32]interface{}) map[int32]interface{} {
+func (m *DefaultRule) CheckPengPengHu(player *proto.Player, result1 map[int32]interface{}) map[int32]interface{} {
 	separate_results := utils.SeparateCards(player.Cards, player.HunCard)
 	for _, wave := range player.Waves {
 		if wave.WaveType == proto.Wave_EatWave {
-			return result
+			return result1
 		}
 	}
 	cur_hun_num := len(separate_results[0])
 	var need_hun int
 	eye := false
+	result := make(map[int32]interface{})
 	for _, cards := range separate_results[1:] {
 		cache_cards := []int32{}
 		for _, card := range cards {
@@ -497,14 +498,15 @@ func (m *DefaultRule) CheckPengPengHu(player *proto.Player, result map[int32]int
 				}
 			}
 			if cur_hun_num+1 < need_hun {
-				result = make(map[int32]interface{})
-				return result
+				return result1
 			}
 		}
 	}
 	if eye && cur_hun_num > need_hun+1 || !eye && cur_hun_num > need_hun {
-		result = make(map[int32]interface{})
 		result[1] = m.NewTing(1).SetPengPengHu()
+	}
+	for key, value := range result1 {
+		result[key] = value
 	}
 	return result
 }
@@ -543,9 +545,50 @@ func (m *DefaultRule) CheckWindYiSe(player *proto.Player) bool {
 	return true
 }
 
+func (m *DefaultRule) CheckPair7(player *proto.Player, result map[int32]interface{}) map[int32]interface{} {
+	if len(player.Cards) != 13 {
+		return result
+	}
+
+	cur_hun_num := utils.Count(player.Cards, player.HunCard)
+	count := 0
+	cards := player.Cards
+	dan_cards := []int32{}
+	shuang_cards := []int32{}
+	cards = utils.DelCountCard(cards, player.HunCard, cur_hun_num)
+	for i := 0; i < len(cards); {
+		// 最后一张牌的情况
+		if i+1 == len(cards) {
+			dan_cards = append(dan_cards, cards[i])
+			break
+		}
+		if cards[i] == cards[i+1] {
+			count = count + 1
+			shuang_cards = append(shuang_cards, cards[i])
+			i = i + 2
+		} else {
+			dan_cards = append(dan_cards, cards[i])
+			i = i + 1
+		}
+	}
+
+	if 7-count == cur_hun_num+1 {
+		for _, card := range dan_cards {
+			ting := m.NewTing(card).SetPair7()
+			result[card] = ting
+		}
+	}
+	if 7-count < cur_hun_num {
+		result[1] = m.NewTing(1).SetPair7()
+	}
+
+	return result
+}
+
 func (m *DefaultRule) GetTingCards(player *proto.Player) ([]int32, []int32, map[int32]interface{}) {
 	separate_results := utils.SeparateCards(player.Cards, player.HunCard)
 	result := m.CheckQingYiSe(player)
+	result = m.CheckPair7(player, result)
 	m.jiang_yi_se = m.CheckJiangYiSe(player)
 	m.wind_yi_se = m.CheckWindYiSe(player)
 	result = m.CheckPengPengHu(player, result)
@@ -568,8 +611,8 @@ func (m *DefaultRule) GetTingCards(player *proto.Player) ([]int32, []int32, map[
 		}
 	}
 	need_num, index := m.GetBestComb(separate_results, player.NeedHun, player.NeedHunWithEye)
-	log.Debug("uid:%v separate_results:%v", player.Uid, separate_results)
-	log.Debug("uid:%v need_hun_arr:%v, need_hun_with_eye_arr:%v index:%v", player.Uid, player.NeedHun, player.NeedHunWithEye, index)
+	//log.Debug("uid:%v separate_results:%v", player.Uid, separate_results)
+	//log.Debug("uid:%v need_hun_arr:%v, need_hun_with_eye_arr:%v index:%v", player.Uid, player.NeedHun, player.NeedHunWithEye, index)
 	if cur_hun_num-need_num >= 2 {
 		result[1] = m.NewTing(1)
 		return player.NeedHun, player.NeedHunWithEye, result

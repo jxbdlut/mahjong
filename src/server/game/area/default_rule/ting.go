@@ -50,6 +50,9 @@ func (m *Ting) Info() string {
 	if m.windyise {
 		return "风一色:" + fmt.Sprintf("%v", utils.CardStr(m.card))
 	}
+	if m.pair_7 {
+		return "七对:" + fmt.Sprintf("%v", utils.CardStr(m.card))
+	}
 	return fmt.Sprintf("%v", utils.CardStr(m.card))
 }
 
@@ -65,6 +68,11 @@ func (m *Ting) SetJiangYiSe() area.Ting {
 
 func (m *Ting) SetWindYiSe() area.Ting {
 	m.windyise = true
+	return m
+}
+
+func (m *Ting) SetPair7() area.Ting {
+	m.pair_7 = true
 	return m
 }
 

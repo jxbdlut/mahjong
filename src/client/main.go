@@ -392,7 +392,7 @@ func (a *agent) SetUserData(data interface{}) {
 func main() {
 	lconf.LogLevel = conf.Server.LogLevel
 	lconf.LogPath = conf.Server.LogPath
-	lconf.LogPath = "./log/client.log"
+	lconf.LogPath = "/var/log/mahjong/client.log"
 	lconf.LogFlag = conf.LogFlag
 	lconf.ConsolePort = conf.Server.ConsolePort
 	lconf.ProfilePath = conf.Server.ProfilePath
